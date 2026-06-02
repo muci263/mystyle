@@ -1,0 +1,169 @@
+export type ApiResponse<T> = {
+  code: number;
+  message: string;
+  data: T;
+};
+
+export type Profile = {
+  name: string;
+  title: string;
+  summary: string;
+  email: string;
+  education: string;
+  tags: string[];
+};
+
+export type SkillGroup = {
+  category: string;
+  items: string[];
+};
+
+export type Experience = {
+  company: string;
+  position: string;
+  period: string;
+  highlights: string[];
+};
+
+export type Evidence = {
+  problem: string;
+  solution: string;
+  result: string;
+};
+
+export type Project = {
+  index: string;
+  slug: string;
+  name: string;
+  summary: string;
+  role: string;
+  tech: string[];
+  metrics: string[];
+  responsibilities: string[];
+  evidence: Evidence[];
+};
+
+export type ModuleDemo = {
+  slug: string;
+  name: string;
+  title: string;
+  demoType: string;
+  project: string;
+  summary: string;
+  tech: string[];
+  apiBase: string;
+  talkingPoints: string[];
+};
+
+export type InterviewGuide = {
+  shortIntro: string;
+  projectOrder: string[];
+  questions: string[];
+  openLinks: string[];
+};
+
+export type TimelineItem = {
+  type: string;
+  title: string;
+  period: string;
+  summary: string;
+  tags: string[];
+};
+
+export type HomeView = {
+  profile: Profile;
+  skills: SkillGroup[];
+  featuredProjects: Project[];
+  moduleDemos: ModuleDemo[];
+  interviewGuide: InterviewGuide;
+};
+
+export type ResumeView = {
+  profile: Profile;
+  skills: SkillGroup[];
+  experiences: Experience[];
+  projects: Project[];
+};
+
+export type JdAnalysisResponse = {
+  analysisId: number;
+  provider: string;
+  role: string;
+  keywords: string[];
+  matchScore: number;
+  summary: string;
+  projectRecommendations: Array<{
+    slug: string;
+    name: string;
+    emphasis: string;
+    supportedBy: string[];
+  }>;
+  moduleRecommendations: Array<{
+    slug: string;
+    title: string;
+    reason: string;
+  }>;
+  riskNotes: string[];
+};
+
+export type VideoLearningSnapshot = {
+  redisRecord: Record<string, unknown>;
+  mysqlRecord: Record<string, unknown>;
+  learningStatus: string;
+  writeCount: number;
+  syncCount: number;
+  logs: Array<{
+    event: string;
+    message: string;
+    time: string;
+  }>;
+};
+
+export type AgentWorkflowRun = {
+  runId: string;
+  status: string;
+  question: string;
+  answer: string;
+  steps: Array<{
+    node: string;
+    status: string;
+    detail: string;
+  }>;
+};
+
+function apiBase() {
+  if (typeof window !== "undefined") {
+    return process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
+  }
+  return process.env.API_INTERNAL_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  const response = await fetch(`${apiBase()}${path}`, {
+    cache: "no-store",
+  });
+  return unwrapResponse<T>(response);
+}
+
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${apiBase()}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  return unwrapResponse<T>(response);
+}
+
+async function unwrapResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  }
+  const payload = (await response.json()) as ApiResponse<T>;
+  if (payload.code !== 0) {
+    throw new Error(payload.message || "API request failed");
+  }
+  return payload.data;
+}

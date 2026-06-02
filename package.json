@@ -1,0 +1,25 @@
+{
+  "name": "mystyle",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Intelligent personal portfolio system for interview-ready project evidence, JD adaptation, and work reproduction demos.",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "lint:web": "npm --workspace apps/web run lint",
+    "dev:server": "cd apps/server && mvn spring-boot:run",
+    "test:server": "cd apps/server && mvn test",
+    "build:server": "cd apps/server && mvn package",
+    "docker:up": "docker compose -f infra/docker/docker-compose.local.yml up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.local.yml down"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "framer-motion": "^12.39.0",
+    "three": "^0.184.0"
+  }
+}

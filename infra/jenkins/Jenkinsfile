@@ -1,0 +1,48 @@
+pipeline {
+  agent any
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Frontend Build') {
+      steps {
+        dir('apps/web') {
+          sh 'npm ci'
+          sh 'npm run lint'
+          sh 'npm run build'
+        }
+      }
+    }
+
+    stage('Backend Test and Package') {
+      steps {
+        dir('apps/server') {
+          sh 'mvn test'
+          sh 'mvn package -DskipTests'
+        }
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        sh 'docker compose -f infra/docker/docker-compose.prod.yml build'
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        sh 'docker compose -f infra/docker/docker-compose.prod.yml up -d'
+      }
+    }
+
+    stage('Health Check') {
+      steps {
+        sh 'curl -f http://localhost/api/health'
+      }
+    }
+  }
+}

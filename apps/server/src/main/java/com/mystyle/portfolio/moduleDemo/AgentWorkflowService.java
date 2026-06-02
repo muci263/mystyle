@@ -1,0 +1,60 @@
+package com.mystyle.portfolio.moduleDemo;
+
+import com.mystyle.portfolio.common.ApiException;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AgentWorkflowService {
+  private final Map<String, AgentWorkflowRun> runs = new ConcurrentHashMap<>();
+
+  public List<Map<String, Object>> templates() {
+    return List.of(
+        Map.of(
+            "templateId", "rag-question",
+            "name", "RAG 知识库问答",
+            "nodes", List.of("intent", "retrieval", "llm", "verify")),
+        Map.of(
+            "templateId", "sql-bot",
+            "name", "SQL 智能问答",
+            "nodes", List.of("intent", "metadata", "sql_safety", "execute", "explain")));
+  }
+
+  public AgentWorkflowRun run(AgentWorkflowRequest request) {
+    String templateId = request.templateId() == null || request.templateId().isBlank()
+        ? "rag-question"
+        : request.templateId();
+    List<AgentWorkflowStep> steps = buildSteps(templateId);
+    String answer = "已根据模板 " + templateId + " 模拟完成工具路由、检索/查询和结果校验。";
+    AgentWorkflowRun run = new AgentWorkflowRun(UUID.randomUUID().toString(), "COMPLETED", request.question(), answer, steps);
+    runs.put(run.runId(), run);
+    return run;
+  }
+
+  public AgentWorkflowRun getRun(String runId) {
+    AgentWorkflowRun run = runs.get(runId);
+    if (run == null) {
+      throw ApiException.notFound("Agent 运行记录不存在");
+    }
+    return run;
+  }
+
+  private List<AgentWorkflowStep> buildSteps(String templateId) {
+    if ("sql-bot".equals(templateId)) {
+      return List.of(
+          new AgentWorkflowStep("intent", "DONE", "识别为数据库问答任务"),
+          new AgentWorkflowStep("metadata", "DONE", "读取表结构与字段说明"),
+          new AgentWorkflowStep("sql_safety", "DONE", "仅允许 SELECT 演示查询"),
+          new AgentWorkflowStep("execute", "DONE", "返回模拟查询结果"),
+          new AgentWorkflowStep("explain", "DONE", "生成结果解释"));
+    }
+    return List.of(
+        new AgentWorkflowStep("intent", "DONE", "识别用户问题意图"),
+        new AgentWorkflowStep("retrieval", "DONE", "Top-K 召回模拟知识片段"),
+        new AgentWorkflowStep("llm", "DONE", "调用 mock LLM 生成回答"),
+        new AgentWorkflowStep("verify", "DONE", "检查回答是否有来源支撑"));
+  }
+}

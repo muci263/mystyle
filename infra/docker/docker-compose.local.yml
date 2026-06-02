@@ -1,0 +1,36 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: mystyle-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-mystyle_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mystyle}
+      MYSQL_USER: ${MYSQL_USERNAME:-mystyle}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mystyle_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mystyle_mysql:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: mystyle-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - mystyle_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mystyle_mysql:
+  mystyle_redis:

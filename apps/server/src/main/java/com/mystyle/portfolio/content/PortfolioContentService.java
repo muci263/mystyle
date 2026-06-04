@@ -1,6 +1,14 @@
 package com.mystyle.portfolio.content;
 
+import com.mystyle.portfolio.blog.BlogAnnotationRequest;
+import com.mystyle.portfolio.blog.BlogCategoryType;
+import com.mystyle.portfolio.blog.BlogCommentRequest;
+import com.mystyle.portfolio.blog.BlogPostRequest;
 import com.mystyle.portfolio.common.ApiException;
+import com.mystyle.portfolio.content.ContentModels.BlogAnnotation;
+import com.mystyle.portfolio.content.ContentModels.BlogCategory;
+import com.mystyle.portfolio.content.ContentModels.BlogComment;
+import com.mystyle.portfolio.content.ContentModels.BlogInteractionSummary;
 import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.HomeView;
 import com.mystyle.portfolio.content.ContentModels.InterviewGuide;
@@ -80,8 +88,9 @@ public class PortfolioContentService {
   }
 
   public List<BlogPost> blogPosts(String category, String tag) {
+    String normalizedCategory = category == null || category.isBlank() ? null : BlogCategoryType.from(category).label();
     return repository.blogPosts().stream()
-        .filter(post -> category == null || category.isBlank() || post.category().equalsIgnoreCase(category))
+        .filter(post -> normalizedCategory == null || post.category().equalsIgnoreCase(normalizedCategory))
         .filter(post -> tag == null || tag.isBlank() || containsIgnoreCase(post.tags(), tag.toLowerCase(Locale.ROOT)))
         .toList();
   }
@@ -91,6 +100,42 @@ public class PortfolioContentService {
         .filter(post -> post.slug().equals(slug))
         .findFirst()
         .orElseThrow(() -> ApiException.notFound("博客文章不存在"));
+  }
+
+  public List<BlogCategory> blogCategories() {
+    return repository.blogCategories();
+  }
+
+  public BlogPost createBlogPost(BlogPostRequest request) {
+    return repository.createBlogPost(request);
+  }
+
+  public BlogPost updateBlogPost(String slug, BlogPostRequest request) {
+    return repository.updateBlogPost(slug, request);
+  }
+
+  public List<BlogComment> blogComments(String slug) {
+    return repository.blogComments(slug);
+  }
+
+  public BlogComment addBlogComment(String slug, BlogCommentRequest request) {
+    return repository.addBlogComment(slug, request);
+  }
+
+  public List<BlogAnnotation> blogAnnotations(String slug) {
+    return repository.blogAnnotations(slug);
+  }
+
+  public BlogAnnotation addBlogAnnotation(String slug, BlogAnnotationRequest request) {
+    return repository.addBlogAnnotation(slug, request);
+  }
+
+  public BlogInteractionSummary blogInteractionSummary(String slug) {
+    return repository.blogInteractionSummary(slug);
+  }
+
+  public BlogInteractionSummary likeBlogPost(String slug) {
+    return repository.likeBlogPost(slug);
   }
 
   private boolean containsIgnoreCase(List<String> values, String keyword) {

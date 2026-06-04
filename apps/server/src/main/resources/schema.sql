@@ -177,3 +177,30 @@ CREATE TABLE IF NOT EXISTS blog_post_tag (
   sort_order INT NOT NULL DEFAULT 0,
   CONSTRAINT fk_blog_post_tag_post FOREIGN KEY (post_id) REFERENCES blog_post(id)
 );
+
+CREATE TABLE IF NOT EXISTS blog_comment (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT NOT NULL,
+  author VARCHAR(64) NOT NULL,
+  content TEXT NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'visible',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_blog_comment_post FOREIGN KEY (post_id) REFERENCES blog_post(id)
+);
+
+CREATE TABLE IF NOT EXISTS blog_annotation (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT NOT NULL,
+  anchor_text VARCHAR(160) NOT NULL,
+  note TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_blog_annotation_post FOREIGN KEY (post_id) REFERENCES blog_post(id)
+);
+
+CREATE TABLE IF NOT EXISTS blog_like (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT NOT NULL,
+  client_key VARCHAR(128) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_blog_like_post FOREIGN KEY (post_id) REFERENCES blog_post(id)
+);

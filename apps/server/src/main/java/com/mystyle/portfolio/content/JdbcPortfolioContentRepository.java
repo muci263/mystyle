@@ -1,8 +1,17 @@
 package com.mystyle.portfolio.content;
 
+import com.mystyle.portfolio.blog.BlogAnnotationRequest;
+import com.mystyle.portfolio.blog.BlogCategoryType;
+import com.mystyle.portfolio.blog.BlogCommentRequest;
+import com.mystyle.portfolio.blog.BlogPostRequest;
+import com.mystyle.portfolio.common.ApiException;
+import com.mystyle.portfolio.content.ContentModels.BlogAnnotation;
+import com.mystyle.portfolio.content.ContentModels.BlogCategory;
+import com.mystyle.portfolio.content.ContentModels.BlogComment;
+import com.mystyle.portfolio.content.ContentModels.BlogInteractionSummary;
+import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.Evidence;
 import com.mystyle.portfolio.content.ContentModels.Experience;
-import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.InterviewGuide;
 import com.mystyle.portfolio.content.ContentModels.ModuleDemo;
 import com.mystyle.portfolio.content.ContentModels.Profile;
@@ -11,12 +20,21 @@ import com.mystyle.portfolio.content.ContentModels.SkillGroup;
 import com.mystyle.portfolio.content.ContentModels.TimelineItem;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcPortfolioContentRepository implements PortfolioContentRepository {
+  private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+  private static final Pattern NON_SLUG_CHAR = Pattern.compile("[^a-z0-9]+");
   private final JdbcTemplate jdbcTemplate;
 
   public JdbcPortfolioContentRepository(JdbcTemplate jdbcTemplate) {
@@ -108,6 +126,137 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
         (rs, rowNum) -> blogPost(rs));
   }
 
+  @Override
+  public List<BlogCategory> blogCategories() {
+    Map<String, Integer> counts = jdbcTemplate.query(
+        """
+        SELECT category, COUNT(*) AS post_count
+        FROM blog_post
+        WHERE status = 'published'
+        GROUP BY category
+        """,
+        (rs, rowNum) -> Map.entry(rs.getString("category"), rs.getInt("post_count")))
+        .stream()
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+    return Arrays.stream(BlogCategoryType.values())
+        .map(type -> new BlogCategory(type.label(), slugify(type.name()), type.name(), counts.getOrDefault(type.label(), 0)))
+        .toList();
+  }
+
+  @Override
+  public BlogPost createBlogPost(BlogPostRequest request) {
+    String slug = uniqueSlug(request.title());
+    String category = BlogCategoryType.from(request.category()).label();
+    int readMinutes = request.readMinutes() == null || request.readMinutes() <= 0
+        ? estimateReadMinutes(request.content())
+        : request.readMinutes();
+    jdbcTemplate.update(
+        """
+        INSERT INTO blog_post (slug, title, excerpt, content, category, status, read_minutes, sort_order)
+        VALUES (?, ?, ?, ?, ?, 'published', ?, ?)
+        """,
+        slug,
+        request.title().trim(),
+        request.excerpt().trim(),
+        request.content().trim(),
+        category,
+        readMinutes,
+        nextBlogSortOrder());
+
+    insertTags(blogPostId(slug), request.tags());
+    return blogPost(slug);
+  }
+
+  @Override
+  public BlogPost updateBlogPost(String slug, BlogPostRequest request) {
+    long postId = blogPostId(slug);
+    String category = BlogCategoryType.from(request.category()).label();
+    int readMinutes = request.readMinutes() == null || request.readMinutes() <= 0
+        ? estimateReadMinutes(request.content())
+        : request.readMinutes();
+    jdbcTemplate.update(
+        """
+        UPDATE blog_post
+        SET title = ?, excerpt = ?, content = ?, category = ?, read_minutes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        request.title().trim(),
+        request.excerpt().trim(),
+        request.content().trim(),
+        category,
+        readMinutes,
+        postId);
+    jdbcTemplate.update("DELETE FROM blog_post_tag WHERE post_id = ?", postId);
+    insertTags(postId, request.tags());
+    return blogPost(slug);
+  }
+
+  @Override
+  public List<BlogComment> blogComments(String slug) {
+    long postId = blogPostId(slug);
+    return jdbcTemplate.query(
+        """
+        SELECT id, author, content, created_at
+        FROM blog_comment
+        WHERE post_id = ? AND status = 'visible'
+        ORDER BY created_at DESC, id DESC
+        """,
+        (rs, rowNum) -> blogComment(rs),
+        postId);
+  }
+
+  @Override
+  public BlogComment addBlogComment(String slug, BlogCommentRequest request) {
+    long postId = blogPostId(slug);
+    jdbcTemplate.update(
+        "INSERT INTO blog_comment (post_id, author, content) VALUES (?, ?, ?)",
+        postId,
+        request.author().trim(),
+        request.content().trim());
+    return latestBlogComment(postId);
+  }
+
+  @Override
+  public List<BlogAnnotation> blogAnnotations(String slug) {
+    long postId = blogPostId(slug);
+    return jdbcTemplate.query(
+        """
+        SELECT id, anchor_text, note, created_at
+        FROM blog_annotation
+        WHERE post_id = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (rs, rowNum) -> blogAnnotation(rs),
+        postId);
+  }
+
+  @Override
+  public BlogAnnotation addBlogAnnotation(String slug, BlogAnnotationRequest request) {
+    long postId = blogPostId(slug);
+    jdbcTemplate.update(
+        "INSERT INTO blog_annotation (post_id, anchor_text, note) VALUES (?, ?, ?)",
+        postId,
+        request.anchorText().trim(),
+        request.note().trim());
+    return latestBlogAnnotation(postId);
+  }
+
+  @Override
+  public BlogInteractionSummary blogInteractionSummary(String slug) {
+    return blogInteractionSummaryById(blogPostId(slug));
+  }
+
+  @Override
+  public BlogInteractionSummary likeBlogPost(String slug) {
+    long postId = blogPostId(slug);
+    jdbcTemplate.update(
+        "INSERT INTO blog_like (post_id, client_key) VALUES (?, ?)",
+        postId,
+        "web-" + System.currentTimeMillis());
+    return blogInteractionSummaryById(postId);
+  }
+
   private Project project(ResultSet rs) throws SQLException {
     long projectId = rs.getLong("id");
     return new Project(
@@ -145,6 +294,7 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
 
   private BlogPost blogPost(ResultSet rs) throws SQLException {
     long postId = rs.getLong("id");
+    BlogInteractionSummary summary = blogInteractionSummaryById(postId);
     return new BlogPost(
         rs.getString("slug"),
         rs.getString("title"),
@@ -153,12 +303,144 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
         rs.getString("category"),
         strings("SELECT tag FROM blog_post_tag WHERE post_id = ? ORDER BY sort_order, id", postId),
         dateString(rs, "published_at"),
-        rs.getInt("read_minutes"));
+        rs.getInt("read_minutes"),
+        summary.likeCount(),
+        summary.commentCount(),
+        summary.annotationCount());
+  }
+
+  private BlogComment blogComment(ResultSet rs) throws SQLException {
+    return new BlogComment(
+        rs.getLong("id"),
+        rs.getString("author"),
+        rs.getString("content"),
+        dateTimeString(rs, "created_at"));
+  }
+
+  private BlogAnnotation blogAnnotation(ResultSet rs) throws SQLException {
+    return new BlogAnnotation(
+        rs.getLong("id"),
+        rs.getString("anchor_text"),
+        rs.getString("note"),
+        dateTimeString(rs, "created_at"));
   }
 
   private String dateString(ResultSet rs, String column) throws SQLException {
     java.sql.Date date = rs.getDate(column);
     return date == null ? null : date.toLocalDate().toString();
+  }
+
+  private String dateTimeString(ResultSet rs, String column) throws SQLException {
+    LocalDateTime dateTime = rs.getTimestamp(column).toLocalDateTime();
+    return DATE_TIME_FORMATTER.format(dateTime);
+  }
+
+  private BlogPost blogPost(String slug) {
+    return jdbcTemplate.query(
+            """
+            SELECT id, slug, title, excerpt, content, category, published_at, read_minutes
+            FROM blog_post
+            WHERE slug = ? AND status = 'published'
+            """,
+            (rs, rowNum) -> blogPost(rs),
+            slug)
+        .stream()
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("博客文章不存在"));
+  }
+
+  private BlogComment latestBlogComment(long postId) {
+    return jdbcTemplate.queryForObject(
+        """
+        SELECT id, author, content, created_at
+        FROM blog_comment
+        WHERE post_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (rs, rowNum) -> blogComment(rs),
+        postId);
+  }
+
+  private BlogAnnotation latestBlogAnnotation(long postId) {
+    return jdbcTemplate.queryForObject(
+        """
+        SELECT id, anchor_text, note, created_at
+        FROM blog_annotation
+        WHERE post_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (rs, rowNum) -> blogAnnotation(rs),
+        postId);
+  }
+
+  private long blogPostId(String slug) {
+    return jdbcTemplate.query(
+            "SELECT id FROM blog_post WHERE slug = ? AND status = 'published'",
+            (rs, rowNum) -> rs.getLong("id"),
+            slug)
+        .stream()
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("博客文章不存在"));
+  }
+
+  private BlogInteractionSummary blogInteractionSummaryById(long postId) {
+    return new BlogInteractionSummary(
+        count("SELECT COUNT(*) FROM blog_like WHERE post_id = ?", postId),
+        count("SELECT COUNT(*) FROM blog_comment WHERE post_id = ? AND status = 'visible'", postId),
+        count("SELECT COUNT(*) FROM blog_annotation WHERE post_id = ?", postId));
+  }
+
+  private int count(String sql, Object... args) {
+    Integer count = jdbcTemplate.queryForObject(sql, Integer.class, args);
+    return count == null ? 0 : count;
+  }
+
+  private int nextBlogSortOrder() {
+    Integer max = jdbcTemplate.queryForObject("SELECT COALESCE(MAX(sort_order), 0) FROM blog_post", Integer.class);
+    return (max == null ? 0 : max) + 1;
+  }
+
+  private void insertTags(long postId, List<String> tags) {
+    if (tags == null || tags.isEmpty()) {
+      return;
+    }
+    int sortOrder = 1;
+    for (String tag : tags) {
+      if (tag == null || tag.isBlank()) {
+        continue;
+      }
+      jdbcTemplate.update(
+          "INSERT INTO blog_post_tag (post_id, tag, sort_order) VALUES (?, ?, ?)",
+          postId,
+          tag.trim(),
+          sortOrder++);
+    }
+  }
+
+  private int estimateReadMinutes(String content) {
+    int words = content == null ? 0 : content.trim().length();
+    return Math.max(1, (int) Math.ceil(words / 450.0));
+  }
+
+  private String uniqueSlug(String title) {
+    String baseSlug = slugify(title);
+    if (baseSlug.isBlank()) {
+      baseSlug = "post";
+    }
+    String slug = baseSlug;
+    int suffix = 2;
+    while (count("SELECT COUNT(*) FROM blog_post WHERE slug = ?", slug) > 0) {
+      slug = baseSlug + "-" + suffix++;
+    }
+    return slug;
+  }
+
+  private String slugify(String value) {
+    String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT).trim();
+    String slug = NON_SLUG_CHAR.matcher(normalized).replaceAll("-");
+    return slug.replaceAll("^-+|-+$", "");
   }
 
   private List<String> strings(String sql, Object... args) {

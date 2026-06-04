@@ -75,7 +75,37 @@ public final class ContentModels {
       String category,
       List<String> tags,
       String publishedAt,
-      int readMinutes) {
+      int readMinutes,
+      int likeCount,
+      int commentCount,
+      int annotationCount) {
+  }
+
+  public record BlogCategory(
+      String name,
+      String slug,
+      String code,
+      int postCount) {
+  }
+
+  public record BlogComment(
+      long id,
+      String author,
+      String content,
+      String createdAt) {
+  }
+
+  public record BlogAnnotation(
+      long id,
+      String anchorText,
+      String note,
+      String createdAt) {
+  }
+
+  public record BlogInteractionSummary(
+      int likeCount,
+      int commentCount,
+      int annotationCount) {
   }
 
   public record HomeView(

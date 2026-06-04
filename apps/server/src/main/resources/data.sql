@@ -6,8 +6,23 @@ INSERT INTO schema_version (version, description)
 VALUES ('0.3.0', 'blog content module')
 ON DUPLICATE KEY UPDATE description = 'blog content module';
 
-DELETE FROM blog_post_tag;
-DELETE FROM blog_post;
+INSERT INTO schema_version (version, description)
+VALUES ('0.4.0', 'blog authoring and interaction module')
+ON DUPLICATE KEY UPDATE description = 'blog authoring and interaction module';
+
+DELETE FROM blog_like WHERE post_id IN (
+  SELECT id FROM blog_post WHERE slug IN ('redis-video-progress-buffer', 'rag-sqlbot-agent-boundary', 'portfolio-docker-deploy-notes')
+);
+DELETE FROM blog_annotation WHERE post_id IN (
+  SELECT id FROM blog_post WHERE slug IN ('redis-video-progress-buffer', 'rag-sqlbot-agent-boundary', 'portfolio-docker-deploy-notes')
+);
+DELETE FROM blog_comment WHERE post_id IN (
+  SELECT id FROM blog_post WHERE slug IN ('redis-video-progress-buffer', 'rag-sqlbot-agent-boundary', 'portfolio-docker-deploy-notes')
+);
+DELETE FROM blog_post_tag WHERE post_id IN (
+  SELECT id FROM blog_post WHERE slug IN ('redis-video-progress-buffer', 'rag-sqlbot-agent-boundary', 'portfolio-docker-deploy-notes')
+);
+DELETE FROM blog_post WHERE slug IN ('redis-video-progress-buffer', 'rag-sqlbot-agent-boundary', 'portfolio-docker-deploy-notes');
 DELETE FROM interview_open_link;
 DELETE FROM interview_question;
 DELETE FROM interview_project_order;
@@ -113,11 +128,25 @@ INSERT INTO interview_open_link (guide_id, item_value, sort_order) VALUES
 (1, '/projects/mine-education-system', 1), (1, '/lab/video-learning', 2), (1, '/jd-adapter', 3);
 
 INSERT INTO blog_post (id, slug, title, excerpt, content, category, status, published_at, read_minutes, sort_order) VALUES
-(1, 'redis-video-progress-buffer', '为什么视频进度上报不应该直接写 MySQL', '从视频学习场景出发，记录我对高频写入、缓存削峰、完播同步和幂等状态流转的理解。', '在视频学习场景里，播放进度会随着 timeupdate 高频触发。如果每一次进度变化都直接写 MySQL，数据库会承担大量重复写入，真实业务价值却很低。\n\n我的处理思路是把播放中的临时状态放到 Redis，按用户、课程、视频维度维护最新进度和写入次数。只有在完播、退出学习或延迟任务触发时，才把最终状态同步到 MySQL。\n\n这个方案的关键不是简单加缓存，而是把数据分为过程态和结果态。过程态追求低延迟和可覆盖，结果态追求准确和可追溯。面试里讲这段时，我会重点解释幂等 key、完播优先级和异常恢复。', 'Backend', 'published', '2026-06-03 21:00:00', 5, 1),
-(2, 'rag-sqlbot-agent-boundary', 'RAG、SQL Bot 和 Agent 的职责边界', '总结私有化 AI 平台接入时，对检索增强、结构化查询和工具编排三类能力的拆分理解。', 'AI 应用工程化时，最容易把 RAG、SQL Bot 和 Agent 混成一个概念。但落到系统设计里，它们应该承担不同职责。\n\nRAG 更适合处理非结构化知识，比如制度文档、产品说明和操作手册。SQL Bot 更适合回答结构化数据问题，比如统计、筛选、趋势查询。Agent 则不应该替代所有能力，它更像调度层，负责识别意图、选择工具、串联步骤并校验结果。\n\n我认为可靠的 AI 应用不是让模型直接做一切，而是把模型放在受约束的工程链路里：输入解析、工具调用、权限边界、结果校验和可观测日志都要明确。', 'AI Engineering', 'published', '2026-06-03 21:10:00', 4, 2),
-(3, 'portfolio-docker-deploy-notes', '把作品集做成 Docker 全栈项目的复盘', '记录这个个人作品集从前端页面到 Spring Boot API、MySQL、Nginx 反代和 Docker Compose 的工程化思路。', '个人作品集如果只是静态页面，面试官只能看到设计效果；如果它能真的跑起来，就可以展示完整工程链路。\n\n这个项目采用 Next.js 前端、Spring Boot 后端、MySQL 内容库、Redis 运行时缓存、Nginx 统一入口和 Docker Compose 编排。浏览器只访问一个 3000 端口，内部再由 Nginx 转发到 web 和 server。\n\n这个过程里踩过一个典型问题：普通 Maven jar 没有 Spring Boot 可执行 manifest，容器里 java -jar 会失败。解决方式是执行 spring-boot:repackage，让 jar 带上启动入口和 BOOT-INF 依赖结构。这个问题很适合在面试里展示排障过程。', 'DevOps', 'published', '2026-06-03 21:20:00', 4, 3);
+(1, 'redis-video-progress-buffer', '为什么视频进度上报不应该直接写 MySQL', '从视频学习场景出发，记录我对高频写入、缓存削峰、完播同步和幂等状态流转的理解。', '在视频学习场景里，播放进度会随着 timeupdate 高频触发。如果每一次进度变化都直接写 MySQL，数据库会承担大量重复写入，真实业务价值却很低。\n\n我的处理思路是把播放中的临时状态放到 Redis，按用户、课程、视频维度维护最新进度和写入次数。只有在完播、退出学习或延迟任务触发时，才把最终状态同步到 MySQL。\n\n这个方案的关键不是简单加缓存，而是把数据分为过程态和结果态。过程态追求低延迟和可覆盖，结果态追求准确和可追溯。面试里讲这段时，我会重点解释幂等 key、完播优先级和异常恢复。', '后端实践', 'published', '2026-06-03 21:00:00', 5, 1),
+(2, 'rag-sqlbot-agent-boundary', 'RAG、SQL Bot 和 Agent 的职责边界', '总结私有化 AI 平台接入时，对检索增强、结构化查询和工具编排三类能力的拆分理解。', 'AI 应用工程化时，最容易把 RAG、SQL Bot 和 Agent 混成一个概念。但落到系统设计里，它们应该承担不同职责。\n\nRAG 更适合处理非结构化知识，比如制度文档、产品说明和操作手册。SQL Bot 更适合回答结构化数据问题，比如统计、筛选、趋势查询。Agent 则不应该替代所有能力，它更像调度层，负责识别意图、选择工具、串联步骤并校验结果。\n\n我认为可靠的 AI 应用不是让模型直接做一切，而是把模型放在受约束的工程链路里：输入解析、工具调用、权限边界、结果校验和可观测日志都要明确。', 'AI学习', 'published', '2026-06-03 21:10:00', 4, 2),
+(3, 'portfolio-docker-deploy-notes', '把作品集做成 Docker 全栈项目的复盘', '记录这个个人作品集从前端页面到 Spring Boot API、MySQL、Nginx 反代和 Docker Compose 的工程化思路。', '个人作品集如果只是静态页面，面试官只能看到设计效果；如果它能真的跑起来，就可以展示完整工程链路。\n\n这个项目采用 Next.js 前端、Spring Boot 后端、MySQL 内容库、Redis 运行时缓存、Nginx 统一入口和 Docker Compose 编排。浏览器只访问一个 3000 端口，内部再由 Nginx 转发到 web 和 server。\n\n这个过程里踩过一个典型问题：普通 Maven jar 没有 Spring Boot 可执行 manifest，容器里 java -jar 会失败。解决方式是执行 spring-boot:repackage，让 jar 带上启动入口和 BOOT-INF 依赖结构。这个问题很适合在面试里展示排障过程。', '工程部署', 'published', '2026-06-03 21:20:00', 4, 3);
 
 INSERT INTO blog_post_tag (post_id, tag, sort_order) VALUES
 (1, 'Redis', 1), (1, 'MySQL', 2), (1, '缓存同步', 3),
 (2, 'RAG', 1), (2, 'SQL Bot', 2), (2, 'Agent', 3),
 (3, 'Docker', 1), (3, 'Nginx', 2), (3, 'Spring Boot', 3);
+
+INSERT INTO blog_comment (post_id, author, content, created_at) VALUES
+(1, '面试官视角', '这一篇适合在讲 Redis 缓存削峰时打开，能补充为什么不是所有状态都应该直接落库。', '2026-06-03 21:30:00'),
+(3, '部署复盘', 'Docker 化这块可以继续补 Jenkins Pipeline 和健康检查截图。', '2026-06-03 21:40:00');
+
+INSERT INTO blog_annotation (post_id, anchor_text, note, created_at) VALUES
+(1, '过程态追求低延迟和可覆盖', '这里可以作为架构取舍的核心旁注：缓存负责高频过程，数据库负责最终事实。', '2026-06-03 21:35:00'),
+(2, '受约束的工程链路', '面试里可以展开权限、工具调用日志和结果校验。', '2026-06-03 21:45:00');
+
+INSERT INTO blog_like (post_id, client_key, created_at) VALUES
+(1, 'seed-redis-1', '2026-06-03 21:36:00'),
+(1, 'seed-redis-2', '2026-06-03 21:37:00'),
+(2, 'seed-ai-1', '2026-06-03 21:46:00'),
+(3, 'seed-devops-1', '2026-06-03 21:47:00');

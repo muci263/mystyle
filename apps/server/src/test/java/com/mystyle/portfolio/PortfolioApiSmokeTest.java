@@ -3,6 +3,7 @@ package com.mystyle.portfolio;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -107,15 +108,79 @@ class PortfolioApiSmokeTest {
 
   @Test
   void blogEndpointsShouldReturnPublishedPostsAndDetail() throws Exception {
+    mockMvc.perform(get("/public/blog-posts/categories"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data[0].name").value("实习心得"))
+        .andExpect(jsonPath("$.data[0].code").value("INTERNSHIP"));
+
     mockMvc.perform(get("/public/blog-posts").param("tag", "Redis"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.code").value(0))
-        .andExpect(jsonPath("$.data[0].slug").value("redis-video-progress-buffer"));
+        .andExpect(jsonPath("$.data[0].slug").value("redis-video-progress-buffer"))
+        .andExpect(jsonPath("$.data[0].likeCount").value(2));
 
     mockMvc.perform(get("/public/blog-posts/portfolio-docker-deploy-notes"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.title").value("把作品集做成 Docker 全栈项目的复盘"))
         .andExpect(jsonPath("$.data.tags[0]").value("Docker"));
+
+    mockMvc.perform(post("/public/blog-posts")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "title": "一次接口幂等性的复盘",
+                  "excerpt": "记录一次从重复提交到幂等 key 设计的技术复盘。",
+                  "content": "背景：接口会被重复调用。\\n\\n方案：用业务唯一键和状态流转兜底。",
+                  "category": "INTERNSHIP",
+                  "tags": ["Idempotent", "API"],
+                  "readMinutes": 3
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.slug").value("post"))
+        .andExpect(jsonPath("$.data.category").value("实习心得"));
+
+    mockMvc.perform(put("/public/blog-posts/post")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "title": "一次接口幂等性的复盘",
+                  "excerpt": "更新后的接口幂等复盘摘要。",
+                  "content": "背景：接口会被重复调用。\\n\\n方案：用业务唯一键、状态流转和重试记录兜底。",
+                  "category": "AI学习",
+                  "tags": ["Idempotent", "AI学习"],
+                  "readMinutes": 4
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.category").value("AI学习"))
+        .andExpect(jsonPath("$.data.tags[1]").value("AI学习"));
+
+    mockMvc.perform(post("/public/blog-posts/redis-video-progress-buffer/comments")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "author": "tester",
+                  "content": "这条评论来自 smoke test"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.author").value("tester"));
+
+    mockMvc.perform(post("/public/blog-posts/redis-video-progress-buffer/annotations")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "anchorText": "过程态",
+                  "note": "旁注可以沉淀面试讲法"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.anchorText").value("过程态"));
+
+    mockMvc.perform(post("/public/blog-posts/redis-video-progress-buffer/likes"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.likeCount").value(3));
   }
 
   @Test

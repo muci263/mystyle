@@ -79,6 +79,36 @@ export type BlogPost = {
   tags: string[];
   publishedAt: string;
   readMinutes: number;
+  likeCount: number;
+  commentCount: number;
+  annotationCount: number;
+};
+
+export type BlogCategory = {
+  name: string;
+  slug: string;
+  code: string;
+  postCount: number;
+};
+
+export type BlogComment = {
+  id: number;
+  author: string;
+  content: string;
+  createdAt: string;
+};
+
+export type BlogAnnotation = {
+  id: number;
+  anchorText: string;
+  note: string;
+  createdAt: string;
+};
+
+export type BlogInteractionSummary = {
+  likeCount: number;
+  commentCount: number;
+  annotationCount: number;
 };
 
 export type HomeView = {
@@ -159,6 +189,18 @@ export async function apiGet<T>(path: string): Promise<T> {
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${apiBase()}${path}`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  return unwrapResponse<T>(response);
+}
+
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${apiBase()}${path}`, {
+    method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },

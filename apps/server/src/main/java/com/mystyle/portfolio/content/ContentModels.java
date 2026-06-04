@@ -67,6 +67,17 @@ public final class ContentModels {
       List<String> tags) {
   }
 
+  public record BlogPost(
+      String slug,
+      String title,
+      String excerpt,
+      String content,
+      String category,
+      List<String> tags,
+      String publishedAt,
+      int readMinutes) {
+  }
+
   public record HomeView(
       Profile profile,
       List<SkillGroup> skills,

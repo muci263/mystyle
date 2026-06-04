@@ -7,6 +7,7 @@ const config: Config = {
       colors: {
         ink: "#09090b",
         graphite: "#5c6068",
+        surface: "#ffffff",
         stonepaper: "#fafafa",
         line: "rgba(9,9,11,0.11)",
         accent: "#2563eb",

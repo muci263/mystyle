@@ -5,7 +5,7 @@ import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useScroll,
 import { ArrowDown, ArrowUpRight, Blocks, BrainCircuit, Database, GitBranch, PlayCircle } from "lucide-react";
 import { PointerEvent as ReactPointerEvent, ReactNode, useRef } from "react";
 import { HeroScene } from "@/components/hero-scene";
-import { HomeView, Project } from "@/lib/api";
+import type { HomeView, Project } from "@/lib/api";
 
 const impact = [
   { value: "60+", title: "问题修复", copy: "真实接口异常与业务逻辑缺陷定位" },
@@ -107,10 +107,10 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
                   {profile.summary} 将项目结论、关键模块和工程部署能力重现为可浏览的面试证据。
                 </p>
                 <div className="flex flex-wrap gap-3">
-                  <Link href="/projects" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink transition hover:bg-[#dbe7ff]">
-                    项目案例
+                  <Link href="/evidence" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink transition hover:bg-[#dbe7ff]">
+                    项目证据
                   </Link>
-                  <Link href="/lab" className="rounded-full border border-white/26 px-6 py-3 text-sm font-medium text-white transition hover:border-white/60">
+                  <Link href="/evidence" className="rounded-full border border-white/26 px-6 py-3 text-sm font-medium text-white transition hover:border-white/60">
                     Live Modules
                   </Link>
                 </div>
@@ -175,8 +175,8 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
                   不描述工作，<br />直接运行它。
                 </h2>
               </div>
-              <Link href="/lab" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink">
-                打开全部 Demo
+              <Link href="/evidence" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink">
+                打开证据系统
               </Link>
             </div>
           </Reveal>
@@ -209,8 +209,8 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
             <p className="mt-7 max-w-sm text-base leading-8 text-graphite">
               粘贴岗位 JD，系统将根据真实经历重组个人介绍、项目顺序和建议演示模块。
             </p>
-            <Link href="/jd-adapter" className="primary-action mt-9 px-6 py-3 text-sm font-medium">
-              进入 JD Adapter <ArrowUpRight size={16} />
+            <Link href="/interview-kit" className="primary-action mt-9 px-6 py-3 text-sm font-medium">
+              进入面试助手 <ArrowUpRight size={16} />
             </Link>
           </div>
         </Reveal>
@@ -235,10 +235,10 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
 
       <section className="border-t border-line px-5 py-16 md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-7 md:flex-row md:items-end">
-          <h2 className="display-light max-w-3xl text-4xl leading-tight md:text-6xl">查看完整履历，或从系统架构开始。</h2>
+          <h2 className="display-light max-w-3xl text-4xl leading-tight md:text-6xl">查看完整履历，或从技术博客继续深入。</h2>
           <div className="flex gap-3">
             <Link href="/resume" className="secondary-action px-6 py-3 text-sm font-medium">在线履历</Link>
-            <Link href="/architecture" className="primary-action px-6 py-3 text-sm font-medium">系统架构</Link>
+            <Link href="/blog" className="primary-action px-6 py-3 text-sm font-medium">技术博客</Link>
           </div>
         </div>
       </section>

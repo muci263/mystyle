@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader, SiteShell, Surface } from "@/components/site-shell";
-import { apiGet, ModuleDemo, Project } from "@/lib/api";
+import { apiGet } from "@/lib/api";
+import type { ModuleDemo, Project } from "@/lib/api";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

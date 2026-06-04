@@ -2,6 +2,7 @@ package com.mystyle.portfolio.content;
 
 import com.mystyle.portfolio.content.ContentModels.Experience;
 import com.mystyle.portfolio.content.ContentModels.InterviewGuide;
+import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.ModuleDemo;
 import com.mystyle.portfolio.content.ContentModels.Profile;
 import com.mystyle.portfolio.content.ContentModels.Project;
@@ -23,4 +24,6 @@ public interface PortfolioContentRepository {
   InterviewGuide interviewGuide();
 
   List<TimelineItem> timeline();
+
+  List<BlogPost> blogPosts();
 }

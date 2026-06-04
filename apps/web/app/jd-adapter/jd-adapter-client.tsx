@@ -1,16 +1,52 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { apiPost, JdAnalysisResponse, ModuleDemo, Project } from "@/lib/api";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { apiGet, apiPost } from "@/lib/api";
+import type { JdAnalysisResponse, ModuleDemo, Project } from "@/lib/api";
 import { Surface } from "@/components/site-shell";
 
 const defaultJd = "Java 后端实习，要求 Spring Boot、Redis、MySQL、微服务，有 AI 或 RAG 经验加分";
 
-export function JdAdapterClient({ projects, modules }: { projects: Project[]; modules: ModuleDemo[] }) {
+export function JdAdapterClient() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [modules, setModules] = useState<ModuleDemo[]>([]);
   const [jd, setJd] = useState(defaultJd);
   const [analysis, setAnalysis] = useState<JdAnalysisResponse | null>(null);
+  const [assetLoading, setAssetLoading] = useState(true);
+  const [assetError, setAssetError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadAssets() {
+      setAssetLoading(true);
+      setAssetError("");
+      try {
+        const [projectAssets, moduleAssets] = await Promise.all([
+          apiGet<Project[]>("/public/projects"),
+          apiGet<ModuleDemo[]>("/public/module-demos"),
+        ]);
+        if (!active) return;
+        setProjects(projectAssets);
+        setModules(moduleAssets);
+      } catch (exception) {
+        if (!active) return;
+        setAssetError(exception instanceof Error ? exception.message : "经历资产加载失败");
+      } finally {
+        if (active) {
+          setAssetLoading(false);
+        }
+      }
+    }
+
+    loadAssets();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const orderedProjects = useMemo(() => {
     if (!analysis) return projects;
@@ -77,6 +113,12 @@ export function JdAdapterClient({ projects, modules }: { projects: Project[]; mo
             ? analysis.summary
             : "右侧内容会根据后端 MySQL 中的项目与模块资产重排，点击分析后由后端 JD Provider 返回结构化结果。"}
         </p>
+        {assetLoading ? <p className="mt-4 text-sm text-graphite">正在从后端加载经历资产...</p> : null}
+        {assetError ? (
+          <p className="mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+            后端数据暂时不可用：{assetError}
+          </p>
+        ) : null}
         {analysis ? (
           <div className="mt-5 flex flex-wrap gap-2">
             {analysis.keywords.map((keyword) => (
@@ -90,7 +132,7 @@ export function JdAdapterClient({ projects, modules }: { projects: Project[]; mo
           <div className="surface p-4">
             <h3 className="font-semibold text-ink">推荐项目顺序</h3>
             <ol className="mt-3 space-y-3 text-sm text-graphite">
-              {orderedProjects.map((project) => {
+              {orderedProjects.length > 0 ? orderedProjects.map((project) => {
                 const recommendation = analysis?.projectRecommendations.find((item) => item.slug === project.slug);
                 return (
                   <li key={project.slug}>
@@ -98,13 +140,13 @@ export function JdAdapterClient({ projects, modules }: { projects: Project[]; mo
                     {recommendation ? <p className="mt-1 leading-6">{recommendation.emphasis}</p> : null}
                   </li>
                 );
-              })}
+              }) : <li>等待数据库项目资产加载。</li>}
             </ol>
           </div>
           <div className="surface p-4">
             <h3 className="font-semibold text-ink">推荐 Demo</h3>
             <div className="mt-3 grid gap-2">
-              {orderedModules.map((module) => {
+              {orderedModules.length > 0 ? orderedModules.map((module) => {
                 const recommendation = analysis?.moduleRecommendations.find((item) => item.slug === module.slug);
                 return (
                   <div key={module.slug} className="border border-line p-3">
@@ -112,7 +154,7 @@ export function JdAdapterClient({ projects, modules }: { projects: Project[]; mo
                     <p className="mt-1 text-xs leading-5 text-graphite">{recommendation?.reason ?? module.summary}</p>
                   </div>
                 );
-              })}
+              }) : <p className="text-sm text-graphite">等待数据库模块资产加载。</p>}
             </div>
           </div>
           {analysis?.riskNotes.length ? (

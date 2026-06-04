@@ -1,8 +1,14 @@
+name: mystyle-prod
+
 services:
   web:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${DOCKER_NODE_IMAGE:-node:22-alpine}
+        NEXT_PUBLIC_API_BASE_URL: /api
+        API_INTERNAL_BASE_URL: http://server:8080/api
     container_name: mystyle-web
     environment:
       NEXT_PUBLIC_API_BASE_URL: /api
@@ -14,6 +20,9 @@ services:
     build:
       context: ../..
       dockerfile: apps/server/Dockerfile
+      args:
+        MAVEN_IMAGE: ${DOCKER_MAVEN_IMAGE:-maven:3.9-eclipse-temurin-21}
+        JRE_IMAGE: ${DOCKER_JRE_IMAGE:-eclipse-temurin:21-jre}
     container_name: mystyle-server
     environment:
       MYSQL_HOST: mysql
@@ -73,4 +82,6 @@ services:
 
 volumes:
   mystyle_prod_mysql:
+    name: mystyle_prod_mysql_data
   mystyle_prod_redis:
+    name: mystyle_prod_redis_data

@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.mystyle.portfolio.analytics.AnalyticsController;
 import com.mystyle.portfolio.analytics.AnalyticsService;
+import com.mystyle.portfolio.blog.BlogController;
 import com.mystyle.portfolio.common.GlobalExceptionHandler;
 import com.mystyle.portfolio.config.CorsConfig;
 import com.mystyle.portfolio.content.JdbcPortfolioContentRepository;
@@ -67,6 +68,7 @@ class PortfolioApiSmokeTest {
             new ResumeController(contentService),
             new ProjectController(contentService),
             new ModuleDemoController(contentService),
+            new BlogController(contentService),
             new JdController(jdAnalysisService),
             new VideoLearningController(videoLearningService),
             new AgentWorkflowController(agentWorkflowService),
@@ -101,6 +103,19 @@ class PortfolioApiSmokeTest {
     mockMvc.perform(get("/public/module-demos").param("tech", "Redis"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data[0].slug").value("video-learning"));
+  }
+
+  @Test
+  void blogEndpointsShouldReturnPublishedPostsAndDetail() throws Exception {
+    mockMvc.perform(get("/public/blog-posts").param("tag", "Redis"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.code").value(0))
+        .andExpect(jsonPath("$.data[0].slug").value("redis-video-progress-buffer"));
+
+    mockMvc.perform(get("/public/blog-posts/portfolio-docker-deploy-notes"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.title").value("把作品集做成 Docker 全栈项目的复盘"))
+        .andExpect(jsonPath("$.data.tags[0]").value("Docker"));
   }
 
   @Test

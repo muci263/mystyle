@@ -70,6 +70,17 @@ export type TimelineItem = {
   tags: string[];
 };
 
+export type BlogPost = {
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  category: string;
+  tags: string[];
+  publishedAt: string;
+  readMinutes: number;
+};
+
 export type HomeView = {
   profile: Profile;
   skills: SkillGroup[];

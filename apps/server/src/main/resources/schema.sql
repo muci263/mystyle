@@ -154,3 +154,26 @@ CREATE TABLE IF NOT EXISTS interview_open_link (
   sort_order INT NOT NULL DEFAULT 0,
   CONSTRAINT fk_interview_open_link_guide FOREIGN KEY (guide_id) REFERENCES interview_guide(id)
 );
+
+CREATE TABLE IF NOT EXISTS blog_post (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  slug VARCHAR(128) NOT NULL UNIQUE,
+  title VARCHAR(160) NOT NULL,
+  excerpt TEXT NOT NULL,
+  content TEXT NOT NULL,
+  category VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'published',
+  published_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  read_minutes INT NOT NULL DEFAULT 4,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS blog_post_tag (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT NOT NULL,
+  tag VARCHAR(64) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  CONSTRAINT fk_blog_post_tag_post FOREIGN KEY (post_id) REFERENCES blog_post(id)
+);

@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { FadeIn } from "@/components/motion-shell";
 import { PageHeader, SiteShell, Surface } from "@/components/site-shell";
-import { apiGet, ModuleDemo } from "@/lib/api";
+import { apiGet } from "@/lib/api";
+import type { ModuleDemo } from "@/lib/api";
 
 const demoSteps = {
   "video-learning": ["播放视频", "timeupdate 事件", "节流上报进度", "写入 Redis", "完播同步 MySQL", "更新学习状态"],
@@ -41,15 +42,15 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
         </Surface>
 
         <FadeIn delay={0.05} className="h-full">
-          <article className="technical-night console-grid h-full p-6">
-            <p className="technical-label font-mono text-xs uppercase tracking-[0.2em]">Flow Visualizer</p>
+          <article className="enhanced-surface lab-card h-full border border-line bg-surface p-6">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Flow Visualizer</p>
             <div className="mt-5 grid gap-3">
               {steps.map((step, index) => (
-                <div key={step} className="console-card flex items-center gap-4 rounded-md p-3">
-                  <span className="technical-label flex h-8 w-8 items-center justify-center bg-white/[0.07] font-mono text-xs">
+                <div key={step} className="lab-flow-step flex items-center gap-4 p-3">
+                  <span className="flex h-8 w-8 items-center justify-center border border-line bg-stonepaper font-mono text-xs text-accent">
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  <span className="text-sm font-medium text-white">{step}</span>
+                  <span className="text-sm font-medium text-ink">{step}</span>
                 </div>
               ))}
             </div>
@@ -57,12 +58,12 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
         </FadeIn>
 
         <FadeIn delay={0.08} className="lg:col-span-2">
-          <article className="technical-night console-grid p-6">
+          <article className="enhanced-surface lab-card border border-line bg-surface p-6">
             <div className="flex items-center gap-2">
               <span className="runtime-dot" />
-              <p className="technical-label font-mono text-xs uppercase tracking-[0.2em]">Runtime Console</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Runtime Console</p>
             </div>
-            <div className="mt-5 border border-white/10 bg-white/[0.035] p-5 font-mono text-xs leading-7 text-white/72">
+            <div className="mt-5 border border-line bg-stonepaper p-5 font-mono text-xs leading-7 text-graphite">
               <p>{"> demoType: " + module.demoType}</p>
               <p>{"> sourceProject: " + module.project}</p>
               <p>{"> renderer: planned"}</p>

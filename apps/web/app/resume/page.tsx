@@ -1,5 +1,6 @@
 import { PageHeader, SiteShell, Surface } from "@/components/site-shell";
-import { apiGet, ResumeView } from "@/lib/api";
+import { apiGet } from "@/lib/api";
+import type { ResumeView } from "@/lib/api";
 
 export default async function ResumePage() {
   const resume = await apiGet<ResumeView>("/public/resume");

@@ -4,11 +4,9 @@ import { PointerTrail } from "@/components/pointer-trail";
 
 const navItems = [
   { href: "/resume", label: "履历" },
-  { href: "/projects", label: "项目案例" },
-  { href: "/lab", label: "模块实验室" },
-  { href: "/jd-adapter", label: "JD 适配" },
-  { href: "/interview", label: "面试模式" },
-  { href: "/architecture", label: "架构" },
+  { href: "/evidence", label: "项目证据" },
+  { href: "/interview-kit", label: "面试助手" },
+  { href: "/blog", label: "技术博客" },
 ];
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
@@ -37,7 +35,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           ))}
         </div>
         <Link
-          href="/lab"
+          href="/evidence"
           className="primary-action px-4 py-2.5 text-xs font-medium md:px-5 md:text-sm"
         >
           Live Demo

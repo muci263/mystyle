@@ -1,4 +1,52 @@
+name: mystyle
+
 services:
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${DOCKER_NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
+        NEXT_PUBLIC_API_BASE_URL: /api
+        API_INTERNAL_BASE_URL: http://server:8080/api
+    container_name: mystyle-web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: /api
+      API_INTERNAL_BASE_URL: http://server:8080/api
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+      args:
+        MAVEN_IMAGE: ${DOCKER_MAVEN_IMAGE:-docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21}
+        JRE_IMAGE: ${DOCKER_JRE_IMAGE:-docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21}
+    container_name: mystyle-server
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mystyle}
+      MYSQL_USERNAME: ${MYSQL_USERNAME:-mystyle}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mystyle_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-secret}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:3000,http://127.0.0.1:3000}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   mysql:
     image: mysql:8.4
     container_name: mystyle-mysql
@@ -7,8 +55,6 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-mystyle}
       MYSQL_USER: ${MYSQL_USERNAME:-mystyle}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mystyle_password}
-    ports:
-      - "3306:3306"
     volumes:
       - mystyle_mysql:/var/lib/mysql
       - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -21,8 +67,6 @@ services:
   redis:
     image: redis:7.4-alpine
     container_name: mystyle-redis
-    ports:
-      - "6379:6379"
     volumes:
       - mystyle_redis:/data
     healthcheck:
@@ -31,6 +75,20 @@ services:
       timeout: 5s
       retries: 10
 
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: mystyle-nginx
+    ports:
+      - "${APP_HTTP_PORT:-3000}:80"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+      - server
+    restart: unless-stopped
+
 volumes:
   mystyle_mysql:
+    name: mystyle_mysql_data
   mystyle_redis:
+    name: mystyle_redis_data

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { PageHeader, SiteShell, Surface } from "@/components/site-shell";
-import { apiGet, Project } from "@/lib/api";
+import { apiGet } from "@/lib/api";
+import type { Project } from "@/lib/api";
 
 export default async function ProjectsPage() {
   const projects = await apiGet<Project[]>("/public/projects");

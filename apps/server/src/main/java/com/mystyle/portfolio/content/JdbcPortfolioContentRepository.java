@@ -2,6 +2,7 @@ package com.mystyle.portfolio.content;
 
 import com.mystyle.portfolio.content.ContentModels.Evidence;
 import com.mystyle.portfolio.content.ContentModels.Experience;
+import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.InterviewGuide;
 import com.mystyle.portfolio.content.ContentModels.ModuleDemo;
 import com.mystyle.portfolio.content.ContentModels.Profile;
@@ -95,6 +96,18 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
             currentProjects.get(1).tech()));
   }
 
+  @Override
+  public List<BlogPost> blogPosts() {
+    return jdbcTemplate.query(
+        """
+        SELECT id, slug, title, excerpt, content, category, published_at, read_minutes
+        FROM blog_post
+        WHERE status = 'published'
+        ORDER BY sort_order, published_at DESC, id DESC
+        """,
+        (rs, rowNum) -> blogPost(rs));
+  }
+
   private Project project(ResultSet rs) throws SQLException {
     long projectId = rs.getLong("id");
     return new Project(
@@ -128,6 +141,24 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
         strings("SELECT tech FROM module_demo_tech WHERE module_id = ? ORDER BY sort_order, id", moduleId),
         rs.getString("api_base"),
         strings("SELECT talking_point FROM module_demo_talking_point WHERE module_id = ? ORDER BY sort_order, id", moduleId));
+  }
+
+  private BlogPost blogPost(ResultSet rs) throws SQLException {
+    long postId = rs.getLong("id");
+    return new BlogPost(
+        rs.getString("slug"),
+        rs.getString("title"),
+        rs.getString("excerpt"),
+        rs.getString("content"),
+        rs.getString("category"),
+        strings("SELECT tag FROM blog_post_tag WHERE post_id = ? ORDER BY sort_order, id", postId),
+        dateString(rs, "published_at"),
+        rs.getInt("read_minutes"));
+  }
+
+  private String dateString(ResultSet rs, String column) throws SQLException {
+    java.sql.Date date = rs.getDate(column);
+    return date == null ? null : date.toLocalDate().toString();
   }
 
   private List<String> strings(String sql, Object... args) {

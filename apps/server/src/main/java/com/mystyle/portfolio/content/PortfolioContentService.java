@@ -1,6 +1,7 @@
 package com.mystyle.portfolio.content;
 
 import com.mystyle.portfolio.common.ApiException;
+import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.HomeView;
 import com.mystyle.portfolio.content.ContentModels.InterviewGuide;
 import com.mystyle.portfolio.content.ContentModels.ModuleDemo;
@@ -76,6 +77,20 @@ public class PortfolioContentService {
 
   public InterviewGuide interviewGuide() {
     return repository.interviewGuide();
+  }
+
+  public List<BlogPost> blogPosts(String category, String tag) {
+    return repository.blogPosts().stream()
+        .filter(post -> category == null || category.isBlank() || post.category().equalsIgnoreCase(category))
+        .filter(post -> tag == null || tag.isBlank() || containsIgnoreCase(post.tags(), tag.toLowerCase(Locale.ROOT)))
+        .toList();
+  }
+
+  public BlogPost blogPost(String slug) {
+    return repository.blogPosts().stream()
+        .filter(post -> post.slug().equals(slug))
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("博客文章不存在"));
   }
 
   private boolean containsIgnoreCase(List<String> values, String keyword) {

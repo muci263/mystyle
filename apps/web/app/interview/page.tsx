@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader, SiteShell, Surface } from "@/components/site-shell";
-import { apiGet, InterviewGuide } from "@/lib/api";
+import { apiGet } from "@/lib/api";
+import type { InterviewGuide } from "@/lib/api";
 
 export default async function InterviewPage() {
   const interviewGuide = await apiGet<InterviewGuide>("/public/interview");

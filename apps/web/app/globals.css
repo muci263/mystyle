@@ -423,6 +423,42 @@ textarea:focus-visible {
   transform: translateX(104%);
 }
 
+.lab-card {
+  position: relative;
+  overflow: hidden;
+  background-image:
+    linear-gradient(rgba(9, 9, 11, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(9, 9, 11, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.lab-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(28rem circle at 92% 0%, rgba(37, 99, 235, 0.1), transparent 46%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 42%);
+}
+
+.lab-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.lab-flow-step {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  transition: border-color 180ms ease, transform 180ms ease, background-color 180ms ease;
+}
+
+.lab-flow-step:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: #fff;
+  transform: translateX(3px);
+}
+
 .runtime-dot {
   position: relative;
   display: inline-block;

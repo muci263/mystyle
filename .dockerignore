@@ -1,0 +1,16 @@
+.git
+.codex
+.idea
+.vscode
+node_modules
+apps/web/.next
+apps/server/target
+dist
+build
+coverage
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+.DS_Store

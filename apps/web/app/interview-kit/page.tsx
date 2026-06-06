@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
 import { JdAdapterClient } from "@/app/jd-adapter/jd-adapter-client";
 import { PageHeader, SiteShell, Surface } from "@/components/site-shell";
 import { apiGet } from "@/lib/api";
@@ -13,20 +11,13 @@ export default async function InterviewKitPage() {
       <PageHeader
         eyebrow="Interview Kit"
         title="岗位适配与面试讲解"
-        description="先用 JD 分析重排项目重点，再用面试叙事框架组织自我介绍、项目顺序、演示入口和高频追问。"
+        description="先用 JD 分析重排项目重点，再用面试叙事框架组织自我介绍、项目顺序和高频追问。"
       />
 
       <section className="mx-auto grid max-w-7xl gap-5 px-5 pt-10 md:px-8 lg:grid-cols-[1.08fr_0.92fr]">
         <Surface>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">30s Intro</p>
           <p className="display-light mt-5 text-2xl leading-10 text-ink">{interviewGuide.shortIntro}</p>
-          <div className="mt-7 flex flex-wrap gap-3">
-            {interviewGuide.openLinks.map((href) => (
-              <Link key={href} href={href} className="secondary-action px-4 py-2 text-sm text-ink">
-                打开 {labelFor(href)} <ArrowUpRight size={14} />
-              </Link>
-            ))}
-          </div>
         </Surface>
 
         <Surface>
@@ -56,12 +47,4 @@ export default async function InterviewKitPage() {
       <JdAdapterClient />
     </SiteShell>
   );
-}
-
-function labelFor(href: string) {
-  if (href.includes("lab")) return "模块演示";
-  if (href.includes("jd-adapter")) return "JD 适配";
-  if (href.includes("projects")) return "项目证据";
-  if (href.includes("evidence")) return "证据系统";
-  return "页面";
 }

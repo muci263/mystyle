@@ -112,6 +112,26 @@ GET /api/public/home?variantId=1
 GET /api/public/resume?variantId=1
 ```
 
+兼容旧版履历展示接口，返回 Profile、Skills、Experience、Projects。
+
+新版结构化履历接口：
+
+```http
+GET /api/public/resume-content
+```
+
+返回草稿/发布模型中的公开履历内容：
+
+- `version`：当前展示版本。优先返回最新 `PUBLISHED`，没有发布版本时兜底 `DRAFT`
+- `basicInfo`：个人信息
+- `sections.SKILL`：技术能力
+- `sections.AWARD`：获奖经历
+- `sections.INTERNSHIP`：实习经历
+- `sections.PROJECT`：项目经历
+- `sections.ADVANTAGE`：个人优势
+
+公开接口只返回 `visible = true` 的条目。
+
 ### 3.3 获取成长路线
 
 ```http
@@ -177,6 +197,115 @@ POST   /api/admin/skills
 PUT    /api/admin/skills/{id}
 DELETE /api/admin/skills/{id}
 ```
+
+## 5.1 履历内容管理接口（第一阶段实现）
+
+履历管理采用草稿/发布机制。第一阶段暂不接入复杂登录鉴权，但接口统一放在 `/api/admin` 下，后续可直接挂 JWT 过滤器。
+
+### 5.1.1 获取履历草稿
+
+```http
+GET /api/admin/resume/draft
+```
+
+响应包含：
+
+- `version`
+- `basicInfo`
+- `sections.SKILL`
+- `sections.AWARD`
+- `sections.INTERNSHIP`
+- `sections.PROJECT`
+- `sections.ADVANTAGE`
+
+### 5.1.2 更新个人信息
+
+```http
+PUT /api/admin/resume/basic-info
+```
+
+请求：
+
+```json
+{
+  "name": "赵豪然",
+  "title": "Java 后端开发",
+  "summary": "个人介绍",
+  "email": "example@mail.com",
+  "phone": "可为空",
+  "location": "山西",
+  "education": "山西大学软件工程本科",
+  "githubUrl": "https://github.com/...",
+  "websiteUrl": "https://..."
+}
+```
+
+### 5.1.3 板块条目 CRUD
+
+```http
+GET    /api/admin/resume/sections/{sectionType}/items
+POST   /api/admin/resume/sections/{sectionType}/items
+PUT    /api/admin/resume/items/{itemId}
+DELETE /api/admin/resume/items/{itemId}
+```
+
+`sectionType` 枚举：
+
+- `SKILL`：技术能力
+- `AWARD`：获奖经历
+- `INTERNSHIP`：实习经历
+- `PROJECT`：项目经历
+- `ADVANTAGE`：个人优势
+
+请求：
+
+```json
+{
+  "title": "Spring Boot",
+  "subtitle": "后端框架",
+  "period": "",
+  "summary": "核心标题或短摘要",
+  "detail": "可换行保存 bullet",
+  "tags": ["Java", "Backend"],
+  "visible": true,
+  "sortOrder": 1
+}
+```
+
+### 5.1.4 发布与版本查询
+
+```http
+POST /api/admin/resume/publish
+GET  /api/admin/resume/versions
+```
+
+发布会将当前草稿复制为新的 `PUBLISHED` 版本，并将旧发布版本归档。
+
+### 5.1.5 简历上传解析与确认写入
+
+第一阶段先支持文本内容上传，后续可替换为 PDF/DOCX 二进制解析和 LLM 结构化。
+
+```http
+POST /api/admin/resume/uploads/parse
+POST /api/admin/resume/uploads/{taskId}/confirm
+```
+
+解析请求：
+
+```json
+{
+  "filename": "resume.txt",
+  "contentType": "text/plain",
+  "content": "简历原文..."
+}
+```
+
+兜底规则：
+
+- 内容为空：返回 `FAILED`，不写入草稿。
+- 能识别标题关键词：返回 `PARSED`，生成结构化预览。
+- 无法识别板块：返回 `FALLBACK_REQUIRED`，保留原始文本和默认个人优势条目，等待人工确认。
+- 只有调用 confirm 后，解析结果才写入草稿版本。
 
 ## 6. 工作模块复现实验室接口
 

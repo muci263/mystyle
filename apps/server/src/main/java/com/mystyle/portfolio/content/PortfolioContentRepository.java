@@ -48,6 +48,10 @@ public interface PortfolioContentRepository {
 
   BlogAnnotation addBlogAnnotation(String slug, BlogAnnotationRequest request);
 
+  BlogAnnotation updateBlogAnnotation(String slug, long annotationId, BlogAnnotationRequest request);
+
+  BlogInteractionSummary deleteBlogAnnotation(String slug, long annotationId);
+
   BlogInteractionSummary blogInteractionSummary(String slug);
 
   BlogInteractionSummary likeBlogPost(String slug);

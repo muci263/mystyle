@@ -9,6 +9,7 @@ import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.PortfolioContentService;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -78,6 +79,21 @@ public class BlogController {
       @PathVariable("slug") String slug,
       @Valid @RequestBody BlogAnnotationRequest request) {
     return ApiResponse.success(contentService.addBlogAnnotation(slug, request));
+  }
+
+  @PutMapping("/{slug}/annotations/{annotationId}")
+  public ApiResponse<BlogAnnotation> updateAnnotation(
+      @PathVariable("slug") String slug,
+      @PathVariable("annotationId") long annotationId,
+      @Valid @RequestBody BlogAnnotationRequest request) {
+    return ApiResponse.success(contentService.updateBlogAnnotation(slug, annotationId, request));
+  }
+
+  @DeleteMapping("/{slug}/annotations/{annotationId}")
+  public ApiResponse<BlogInteractionSummary> deleteAnnotation(
+      @PathVariable("slug") String slug,
+      @PathVariable("annotationId") long annotationId) {
+    return ApiResponse.success(contentService.deleteBlogAnnotation(slug, annotationId));
   }
 
   @PostMapping("/{slug}/likes")

@@ -130,6 +130,14 @@ public class PortfolioContentService {
     return repository.addBlogAnnotation(slug, request);
   }
 
+  public BlogAnnotation updateBlogAnnotation(String slug, long annotationId, BlogAnnotationRequest request) {
+    return repository.updateBlogAnnotation(slug, annotationId, request);
+  }
+
+  public BlogInteractionSummary deleteBlogAnnotation(String slug, long annotationId) {
+    return repository.deleteBlogAnnotation(slug, annotationId);
+  }
+
   public BlogInteractionSummary blogInteractionSummary(String slug) {
     return repository.blogInteractionSummary(slug);
   }

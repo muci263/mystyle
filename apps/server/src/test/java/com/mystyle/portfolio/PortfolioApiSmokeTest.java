@@ -1,6 +1,7 @@
 package com.mystyle.portfolio;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -27,6 +28,11 @@ import com.mystyle.portfolio.moduleDemo.VideoLearningService;
 import com.mystyle.portfolio.profile.ProfileController;
 import com.mystyle.portfolio.profile.ResumeController;
 import com.mystyle.portfolio.project.ProjectController;
+import com.mystyle.portfolio.resume.JdbcResumeAdminRepository;
+import com.mystyle.portfolio.resume.ResumeAdminController;
+import com.mystyle.portfolio.resume.ResumeAdminService;
+import com.mystyle.portfolio.resume.ResumePublicController;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +62,9 @@ class PortfolioApiSmokeTest {
     populator.execute(dataSource);
 
     JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+    ObjectMapper objectMapper = new ObjectMapper();
     PortfolioContentService contentService = new PortfolioContentService(new JdbcPortfolioContentRepository(jdbcTemplate));
+    ResumeAdminService resumeAdminService = new ResumeAdminService(new JdbcResumeAdminRepository(jdbcTemplate, objectMapper), objectMapper);
     JdAnalysisService jdAnalysisService = new JdAnalysisService(contentService);
     VideoLearningService videoLearningService = new VideoLearningService();
     AgentWorkflowService agentWorkflowService = new AgentWorkflowService();
@@ -70,6 +78,8 @@ class PortfolioApiSmokeTest {
             new ProjectController(contentService),
             new ModuleDemoController(contentService),
             new BlogController(contentService),
+            new ResumeAdminController(resumeAdminService),
+            new ResumePublicController(resumeAdminService),
             new JdController(jdAnalysisService),
             new VideoLearningController(videoLearningService),
             new AgentWorkflowController(agentWorkflowService),
@@ -178,9 +188,108 @@ class PortfolioApiSmokeTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.anchorText").value("过程态"));
 
+    mockMvc.perform(put("/public/blog-posts/redis-video-progress-buffer/annotations/3")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "anchorText": "过程态更新",
+                  "note": "旁注已更新"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.anchorText").value("过程态更新"))
+        .andExpect(jsonPath("$.data.note").value("旁注已更新"));
+
+    mockMvc.perform(delete("/public/blog-posts/redis-video-progress-buffer/annotations/3"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.annotationCount").value(1));
+
     mockMvc.perform(post("/public/blog-posts/redis-video-progress-buffer/likes"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.likeCount").value(3));
+  }
+
+  @Test
+  void resumeAdminShouldManageDraftUploadAndPublish() throws Exception {
+    mockMvc.perform(get("/admin/resume/draft"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.version.status").value("DRAFT"))
+        .andExpect(jsonPath("$.data.basicInfo.name").value("赵豪然"))
+        .andExpect(jsonPath("$.data.sections.SKILL[0].title").value("Java / Spring Boot"));
+
+    mockMvc.perform(put("/admin/resume/basic-info")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "name": "赵豪然",
+                  "title": "Java 后端开发 / AI 工程化",
+                  "summary": "用于测试的可编辑个人信息。",
+                  "email": "itmucizhr@163.com",
+                  "phone": "",
+                  "location": "山西",
+                  "education": "山西大学 软件工程 本科",
+                  "githubUrl": "",
+                  "websiteUrl": ""
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.title").value("Java 后端开发 / AI 工程化"));
+
+    mockMvc.perform(post("/admin/resume/sections/AWARD/items")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "title": "校级奖学金",
+                  "subtitle": "获奖经历",
+                  "period": "2024",
+                  "summary": "用于测试的获奖条目",
+                  "detail": "可编辑、可排序、可隐藏",
+                  "tags": ["奖学金"],
+                  "visible": true,
+                  "sortOrder": 1
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.sectionType").value("AWARD"))
+        .andExpect(jsonPath("$.data.title").value("校级奖学金"));
+
+    mockMvc.perform(get("/admin/resume/sections/AWARD/items"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data[0].title").value("校级奖学金"));
+
+    String uploadResponse = mockMvc.perform(post("/admin/resume/uploads/parse")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "filename": "resume.txt",
+                  "contentType": "text/plain",
+                  "content": "赵豪然\\nitmucizhr@163.com\\n技术能力\\nJava Spring Boot Redis MySQL\\n项目经历\\n矿山教育系统\\n视频进度上报与 Redis 缓存同步\\n个人优势\\n工程化意识强"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("PARSED"))
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
+
+    long taskId = uploadResponse.contains("\"id\":1") ? 1 : 0;
+    mockMvc.perform(post("/admin/resume/uploads/{taskId}/confirm", taskId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.sections.PROJECT[0].title").value("矿山教育系统"));
+
+    mockMvc.perform(post("/admin/resume/publish"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("PUBLISHED"));
+
+    mockMvc.perform(get("/public/resume-content"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.version.status").value("PUBLISHED"))
+        .andExpect(jsonPath("$.data.basicInfo.name").value("赵豪然"))
+        .andExpect(jsonPath("$.data.sections.PROJECT[0].title").value("矿山教育系统"));
+
+    mockMvc.perform(get("/admin/resume/versions"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data[0].status").exists());
   }
 
   @Test

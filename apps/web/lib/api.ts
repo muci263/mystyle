@@ -126,6 +126,67 @@ export type ResumeView = {
   projects: Project[];
 };
 
+export type ResumeSectionType = "SKILL" | "AWARD" | "INTERNSHIP" | "PROJECT" | "ADVANTAGE";
+
+export type ResumeVersion = {
+  id: number;
+  versionName: string;
+  status: string;
+  sourceTaskId: number | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ResumeBasicInfo = {
+  id: number;
+  versionId: number;
+  name: string;
+  title: string;
+  summary: string;
+  email: string;
+  phone: string;
+  location: string;
+  education: string;
+  githubUrl: string;
+  websiteUrl: string;
+  updatedAt: string;
+};
+
+export type ResumeSectionItem = {
+  id: number;
+  versionId: number;
+  sectionType: ResumeSectionType;
+  title: string;
+  subtitle: string;
+  period: string;
+  summary: string;
+  detail: string;
+  tags: string[];
+  visible: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ResumeDraftView = {
+  version: ResumeVersion;
+  basicInfo: ResumeBasicInfo;
+  sections: Record<ResumeSectionType, ResumeSectionItem[]>;
+};
+
+export type ResumeUploadTask = {
+  id: number;
+  filename: string;
+  contentType: string;
+  status: string;
+  rawText: string;
+  parsedJson: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type JdAnalysisResponse = {
   analysisId: number;
   provider: string;
@@ -205,6 +266,14 @@ export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
       "Content-Type": "application/json",
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  return unwrapResponse<T>(response);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const response = await fetch(`${apiBase()}${path}`, {
+    method: "DELETE",
     cache: "no-store",
   });
   return unwrapResponse<T>(response);

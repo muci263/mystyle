@@ -243,6 +243,38 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
   }
 
   @Override
+  public BlogAnnotation updateBlogAnnotation(String slug, long annotationId, BlogAnnotationRequest request) {
+    long postId = blogPostId(slug);
+    int updatedRows = jdbcTemplate.update(
+        """
+        UPDATE blog_annotation
+        SET anchor_text = ?, note = ?
+        WHERE id = ? AND post_id = ?
+        """,
+        request.anchorText().trim(),
+        request.note().trim(),
+        annotationId,
+        postId);
+    if (updatedRows == 0) {
+      throw ApiException.notFound("旁注不存在");
+    }
+    return blogAnnotation(postId, annotationId);
+  }
+
+  @Override
+  public BlogInteractionSummary deleteBlogAnnotation(String slug, long annotationId) {
+    long postId = blogPostId(slug);
+    int deletedRows = jdbcTemplate.update(
+        "DELETE FROM blog_annotation WHERE id = ? AND post_id = ?",
+        annotationId,
+        postId);
+    if (deletedRows == 0) {
+      throw ApiException.notFound("旁注不存在");
+    }
+    return blogInteractionSummaryById(postId);
+  }
+
+  @Override
   public BlogInteractionSummary blogInteractionSummary(String slug) {
     return blogInteractionSummaryById(blogPostId(slug));
   }
@@ -373,6 +405,21 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
         """,
         (rs, rowNum) -> blogAnnotation(rs),
         postId);
+  }
+
+  private BlogAnnotation blogAnnotation(long postId, long annotationId) {
+    return jdbcTemplate.query(
+            """
+            SELECT id, anchor_text, note, created_at
+            FROM blog_annotation
+            WHERE post_id = ? AND id = ?
+            """,
+            (rs, rowNum) -> blogAnnotation(rs),
+            postId,
+            annotationId)
+        .stream()
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("旁注不存在"));
   }
 
   private long blogPostId(String slug) {

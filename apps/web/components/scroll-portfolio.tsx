@@ -7,12 +7,6 @@ import { PointerEvent as ReactPointerEvent, ReactNode, useRef } from "react";
 import { HeroScene } from "@/components/hero-scene";
 import type { HomeView, Project } from "@/lib/api";
 
-const impact = [
-  { value: "60+", title: "问题修复", copy: "真实接口异常与业务逻辑缺陷定位" },
-  { value: "800ms", title: "查询响应", copy: "由 2s+ 优化至可量化表现" },
-  { value: "-70%", title: "重复写入", copy: "视频进度缓存同步的结果" },
-];
-
 const labIcons = [PlayCircle, Database, BrainCircuit, Blocks, GitBranch];
 
 export function ScrollPortfolio({ home }: { home: HomeView }) {
@@ -96,22 +90,20 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
             <Reveal disabled={reduceMotion}>
               <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[#82aaff]">{profile.name} / Engineering Evidence</p>
               <h1 className="display mt-7 text-balance text-[clamp(3.6rem,9.2vw,8.4rem)] leading-[0.92] text-white">
-                Backend systems,
+                Backend evidence,
                 <br />
-                made visible.
+                live portfolio.
               </h1>
             </Reveal>
             <Reveal disabled={reduceMotion} delay={0.11}>
               <div className="mt-9 flex flex-col gap-8 border-t border-white/16 pt-7 md:flex-row md:items-end md:justify-between">
-                <p className="max-w-lg text-base leading-8 text-white/68">
-                  {profile.summary} 将项目结论、关键模块和工程部署能力重现为可浏览的面试证据。
-                </p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.26em] text-white/58">Spring Boot / Redis / AI Engineering / Docker</p>
                 <div className="flex flex-wrap gap-3">
                   <Link href="/evidence" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink transition hover:bg-[#dbe7ff]">
                     项目证据
                   </Link>
-                  <Link href="/evidence" className="rounded-full border border-white/26 px-6 py-3 text-sm font-medium text-white transition hover:border-white/60">
-                    Live Modules
+                  <Link href="/lab" className="rounded-full border border-white/26 px-6 py-3 text-sm font-medium text-white transition hover:border-white/60">
+                    经典功能复现
                   </Link>
                 </div>
               </div>
@@ -124,30 +116,16 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
         </div>
       </section>
 
-      <section className="border-b border-line bg-white">
-        <div className="mx-auto grid max-w-7xl px-5 py-16 md:grid-cols-3 md:px-8 md:py-24">
-          {impact.map((item, index) => (
-            <Reveal key={item.title} disabled={reduceMotion} delay={index * 0.06}>
-              <article className="border-line py-8 md:border-l md:px-9 md:py-0 first:md:border-l-0 first:md:pl-0">
-                <p className="metric-number">{item.value}</p>
-                <p className="mt-6 text-lg font-medium">{item.title}</p>
-                <p className="mt-3 max-w-xs text-sm leading-7 text-graphite">{item.copy}</p>
-              </article>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-32">
+      <section className="home-evidence-section mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-28">
         <Reveal disabled={reduceMotion}>
-          <div className="mb-20 flex flex-col justify-between gap-8 border-b border-line pb-10 md:flex-row md:items-end">
+          <div className="mb-12 flex flex-col justify-between gap-8 border-b border-line pb-10 md:flex-row md:items-end">
             <div>
               <p className="eyebrow">Selected Evidence</p>
-              <h2 className="display mt-7 max-w-3xl text-5xl leading-[1.02] md:text-7xl">项目不是列表，<br />是证明路径。</h2>
+              <h2 className="display mt-7 max-w-3xl text-5xl leading-[1.02] md:text-7xl">项目证据</h2>
             </div>
-            <p className="max-w-xs text-sm leading-7 text-graphite">
-              两项真实实践，从业务问题进入技术选择，再连接到可展示模块。
-            </p>
+            <Link href="/projects" className="text-link inline-flex items-center gap-2 text-sm font-medium">
+              全部项目 <ArrowUpRight size={16} />
+            </Link>
           </div>
         </Reveal>
 
@@ -172,11 +150,11 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
               <div>
                 <p className="eyebrow technical-label">Runtime Lab</p>
                 <h2 className="display mt-7 max-w-4xl text-5xl leading-[1.03] text-white md:text-7xl">
-                  不描述工作，<br />直接运行它。
+                  经典功能复现
                 </h2>
               </div>
-              <Link href="/evidence" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink">
-                打开证据系统
+              <Link href="/lab" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink">
+                进入实验室
               </Link>
             </div>
           </Reveal>
@@ -192,7 +170,6 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
                       <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#82aaff]">{module.demoType}</p>
                     </div>
                     <h3 className="mt-4 text-base font-medium text-white">{module.name}</h3>
-                    <p className="mt-2 text-xs leading-6 text-white/55">{module.title}</p>
                   </Link>
                 </Reveal>
               );
@@ -201,47 +178,6 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-14 px-5 py-20 md:px-8 md:py-32 lg:grid-cols-[0.82fr_1.18fr]">
-        <Reveal disabled={reduceMotion}>
-          <div>
-            <p className="eyebrow">Adaptive Interview</p>
-            <h2 className="display mt-7 text-5xl leading-[1.04] md:text-7xl">针对岗位，<br />重排证据。</h2>
-            <p className="mt-7 max-w-sm text-base leading-8 text-graphite">
-              粘贴岗位 JD，系统将根据真实经历重组个人介绍、项目顺序和建议演示模块。
-            </p>
-            <Link href="/interview-kit" className="primary-action mt-9 px-6 py-3 text-sm font-medium">
-              进入面试助手 <ArrowUpRight size={16} />
-            </Link>
-          </div>
-        </Reveal>
-        <Reveal disabled={reduceMotion} delay={0.08}>
-          <div className="surface p-6 md:p-8">
-            <div className="flex items-center justify-between border-b border-line pb-5">
-              <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">Matching Preview</span>
-              <span className="metric-pill">86 / 100</span>
-            </div>
-            <p className="mt-8 text-sm text-graphite">输入岗位 JD</p>
-            <div className="mt-3 min-h-32 border border-line bg-stonepaper p-4 text-sm leading-7 text-graphite">
-              Java 后端开发 · Spring Boot · Redis · 微服务 · AI 应用工程化...
-            </div>
-            <div className="mt-7 grid gap-3 sm:grid-cols-3">
-              {["Redis 优化", "微服务项目", "Agent Demo"].map((item) => (
-                <div key={item} className="border border-line p-4 text-sm font-medium">{item}</div>
-              ))}
-            </div>
-          </div>
-        </Reveal>
-      </section>
-
-      <section className="border-t border-line px-5 py-16 md:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-7 md:flex-row md:items-end">
-          <h2 className="display-light max-w-3xl text-4xl leading-tight md:text-6xl">查看完整履历，或从技术博客继续深入。</h2>
-          <div className="flex gap-3">
-            <Link href="/resume" className="secondary-action px-6 py-3 text-sm font-medium">在线履历</Link>
-            <Link href="/blog" className="primary-action px-6 py-3 text-sm font-medium">技术博客</Link>
-          </div>
-        </div>
-      </section>
     </>
   );
 }
@@ -270,7 +206,6 @@ function ProjectExhibit({ project, disabled, index }: { project: Project; disabl
         style={disabled ? undefined : { opacity: contentOpacity, x: labelX }}
       >
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Case / {project.index}</p>
-        <p className="mt-0 text-sm text-graphite lg:mt-7">{project.role}</p>
       </motion.div>
       <motion.div
         className="scroll-transform"
@@ -282,7 +217,6 @@ function ProjectExhibit({ project, disabled, index }: { project: Project; disabl
             {project.name}
           </h3>
         </Link>
-        <p className="mt-6 max-w-2xl text-base leading-8 text-graphite">{project.summary}</p>
         <div className="mt-10 flex flex-col gap-6 border-t border-line pt-7 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
             {project.tech.map((tech) => (

@@ -29,8 +29,19 @@ export function BlogEngagementClient({
       setSummary((current) => ({ ...current, annotationCount: current.annotationCount + 1 }));
     }
 
+    function handleAnnotationDeleted(event: Event) {
+      const nextSummary = (event as CustomEvent<BlogInteractionSummary>).detail;
+      if (nextSummary) {
+        setSummary(nextSummary);
+      }
+    }
+
     window.addEventListener("blog-annotation-created", handleAnnotationCreated);
-    return () => window.removeEventListener("blog-annotation-created", handleAnnotationCreated);
+    window.addEventListener("blog-annotation-deleted", handleAnnotationDeleted);
+    return () => {
+      window.removeEventListener("blog-annotation-created", handleAnnotationCreated);
+      window.removeEventListener("blog-annotation-deleted", handleAnnotationDeleted);
+    };
   }, []);
 
   async function like() {

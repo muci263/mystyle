@@ -10,6 +10,14 @@ INSERT INTO schema_version (version, description)
 VALUES ('0.4.0', 'blog authoring and interaction module')
 ON DUPLICATE KEY UPDATE description = 'blog authoring and interaction module';
 
+INSERT INTO schema_version (version, description)
+VALUES ('0.5.0', 'resume content management module')
+ON DUPLICATE KEY UPDATE description = 'resume content management module';
+
+DELETE FROM resume_section_item WHERE version_id IN (SELECT id FROM resume_version WHERE version_name = '默认草稿');
+DELETE FROM resume_basic_info WHERE version_id IN (SELECT id FROM resume_version WHERE version_name = '默认草稿');
+DELETE FROM resume_version WHERE version_name = '默认草稿';
+
 DELETE FROM blog_like WHERE post_id IN (
   SELECT id FROM blog_post WHERE slug IN ('redis-video-progress-buffer', 'rag-sqlbot-agent-boundary', 'portfolio-docker-deploy-notes')
 );
@@ -44,6 +52,20 @@ DELETE FROM profile;
 
 INSERT INTO profile (id, name, title, summary, email, education) VALUES
 (1, '赵豪然', 'Java 后端开发', '山西大学软件工程本科在读，关注 Spring Boot、微服务、Redis 缓存优化、AI 应用接入与工程化部署。', 'itmucizhr@163.com', '山西大学 软件工程 本科');
+
+INSERT INTO resume_version (version_name, status) VALUES
+('默认草稿', 'DRAFT');
+
+INSERT INTO resume_basic_info (version_id, name, title, summary, email, phone, location, education, github_url, website_url) VALUES
+((SELECT id FROM resume_version WHERE version_name = '默认草稿' ORDER BY id DESC LIMIT 1), '赵豪然', 'Java 后端开发', '山西大学软件工程本科在读，关注 Spring Boot、微服务、Redis 缓存优化、AI 应用接入与工程化部署。', 'itmucizhr@163.com', '', '山西', '山西大学 软件工程 本科', '', '');
+
+INSERT INTO resume_section_item (version_id, section_type, title, subtitle, period, summary, detail, tags, visible, sort_order) VALUES
+((SELECT id FROM resume_version WHERE version_name = '默认草稿' ORDER BY id DESC LIMIT 1), 'SKILL', 'Java / Spring Boot', '后端开发', '', 'Java 后端与 Spring Boot 工程实践', 'Spring MVC\nMyBatis-Plus\n统一异常处理', '["Java","Spring Boot","Backend"]', 1, 1),
+((SELECT id FROM resume_version WHERE version_name = '默认草稿' ORDER BY id DESC LIMIT 1), 'SKILL', 'Redis / MySQL', '数据与缓存', '', '缓存削峰、慢 SQL 排查与数据同步', 'Redis 缓存\nMySQL 查询优化\n幂等同步', '["Redis","MySQL"]', 1, 2),
+((SELECT id FROM resume_version WHERE version_name = '默认草稿' ORDER BY id DESC LIMIT 1), 'INTERNSHIP', '山西恒山科技有限公司', 'Java 后端实习', '2025.12 - 至今', '参与产品中心系统后端开发、维护与迭代。', '完成 8 个功能点及接口调整\n定位并修复 5 类 60 个问题\n协助优化 2 条慢 SQL', '["Java","Spring Boot","问题排查"]', 1, 1),
+((SELECT id FROM resume_version WHERE version_name = '默认草稿' ORDER BY id DESC LIMIT 1), 'PROJECT', '矿山教育系统', '学习服务后端开发', '项目实践', '企业培训场景下的微服务学习闭环系统。', '视频进度上报\nRedis 缓存同步\n学习状态流转', '["Spring Boot","Redis","MySQL"]', 1, 1),
+((SELECT id FROM resume_version WHERE version_name = '默认草稿' ORDER BY id DESC LIMIT 1), 'PROJECT', 'MaxKB + SqlBot 私有化 AI 管理平台', 'AI 平台接入与部署联调', '项目实践', '面向企业内部的 AI 应用统一管理、SQL 智能问答与 RAG 接入平台。', '私有化部署\nSQL 智能问答验证\nRAG 入库与检索流程', '["Docker","RAG","SQL Bot"]', 1, 2),
+((SELECT id FROM resume_version WHERE version_name = '默认草稿' ORDER BY id DESC LIMIT 1), 'ADVANTAGE', '工程化意识', '个人优势', '', '能把项目经历拆成可运行、可验证、可讲解的工程证据。', '关注接口设计、部署链路、异常兜底和面试表达。', '["工程化","表达"]', 1, 1);
 
 INSERT INTO profile_tag (profile_id, tag, sort_order) VALUES
 (1, 'Spring Boot', 1), (1, 'Spring Cloud', 2), (1, 'Redis', 3), (1, 'MySQL', 4),

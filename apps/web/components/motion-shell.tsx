@@ -29,14 +29,17 @@ export function FadeIn({
 export function MotionSurface({
   children,
   className = "",
+  id,
 }: {
   children: React.ReactNode;
   className?: string;
+  id?: string;
 }) {
   const reduceMotion = Boolean(useReducedMotion());
 
   return (
     <motion.article
+      id={id}
       initial={reduceMotion ? false : { opacity: 0, y: 36 }}
       whileInView={{ opacity: 1, y: 0 }}
       whileHover={reduceMotion ? undefined : { y: -3 }}

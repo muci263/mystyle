@@ -204,3 +204,58 @@ CREATE TABLE IF NOT EXISTS blog_like (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_blog_like_post FOREIGN KEY (post_id) REFERENCES blog_post(id)
 );
+
+CREATE TABLE IF NOT EXISTS resume_version (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  version_name VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  source_task_id BIGINT NULL,
+  published_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS resume_basic_info (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  version_id BIGINT NOT NULL,
+  name VARCHAR(64) NOT NULL,
+  title VARCHAR(128) NOT NULL,
+  summary TEXT NOT NULL,
+  email VARCHAR(128) NOT NULL,
+  phone VARCHAR(64) NULL,
+  location VARCHAR(128) NULL,
+  education VARCHAR(128) NOT NULL,
+  github_url VARCHAR(255) NULL,
+  website_url VARCHAR(255) NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_resume_basic_info_version FOREIGN KEY (version_id) REFERENCES resume_version(id)
+);
+
+CREATE TABLE IF NOT EXISTS resume_section_item (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  version_id BIGINT NOT NULL,
+  section_type VARCHAR(32) NOT NULL,
+  title VARCHAR(160) NOT NULL,
+  subtitle VARCHAR(160) NULL,
+  period VARCHAR(64) NULL,
+  summary TEXT NULL,
+  detail TEXT NULL,
+  tags TEXT NULL,
+  visible TINYINT NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_resume_section_item_version FOREIGN KEY (version_id) REFERENCES resume_version(id)
+);
+
+CREATE TABLE IF NOT EXISTS resume_upload_task (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  filename VARCHAR(255) NOT NULL,
+  content_type VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  raw_text LONGTEXT NOT NULL,
+  parsed_json LONGTEXT NULL,
+  error_message TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

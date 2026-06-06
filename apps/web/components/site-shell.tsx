@@ -80,9 +80,11 @@ export function PageHeader({
 export function Surface({
   children,
   className = "",
+  id,
 }: {
   children: React.ReactNode;
   className?: string;
+  id?: string;
 }) {
-  return <MotionSurface className={className}>{children}</MotionSurface>;
+  return <MotionSurface id={id} className={className}>{children}</MotionSurface>;
 }

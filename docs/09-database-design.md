@@ -7,6 +7,8 @@
 - 关键实体保留 `visibility`、`sort_order`、`created_at`、`updated_at` 字段。
 - LLM 生成内容与原始真实经历分离，避免污染事实数据。
 - 访问统计只记录匿名事件，不采集敏感个人信息。
+- 履历内容采用“草稿版本 -> 发布版本”的管理方式，前台展示只读取已发布版本。
+- 简历上传解析结果先进入解析任务表，必须确认后才写入草稿，避免解析错误覆盖真实数据。
 
 ## 2. 核心实体
 
@@ -28,6 +30,75 @@ operation_log
 ```
 
 ## 3. 表结构草案
+
+### 3.0 resume_version
+
+履历版本表。第一阶段用于维护草稿、发布和后续回滚能力。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| version_name | varchar(128) | 版本名称 |
+| status | varchar(32) | `DRAFT` / `PUBLISHED` / `ARCHIVED` |
+| source_task_id | bigint | 来源解析任务，可为空 |
+| published_at | datetime | 发布时间，可为空 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
+### 3.0.1 resume_basic_info
+
+个人基础信息，按版本归档。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| version_id | bigint | 履历版本 |
+| name | varchar(64) | 姓名 |
+| title | varchar(128) | 求职方向/标题 |
+| summary | text | 个人介绍 |
+| email | varchar(128) | 邮箱 |
+| phone | varchar(64) | 手机号 |
+| location | varchar(128) | 所在地 |
+| education | varchar(128) | 教育摘要 |
+| github_url | varchar(255) | GitHub |
+| website_url | varchar(255) | 个人站点 |
+| updated_at | datetime | 更新时间 |
+
+### 3.0.2 resume_section_item
+
+统一承载技术能力、获奖经历、实习经历、项目经历、个人优势。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| version_id | bigint | 履历版本 |
+| section_type | varchar(32) | `SKILL` / `AWARD` / `INTERNSHIP` / `PROJECT` / `ADVANTAGE` |
+| title | varchar(160) | 标题 |
+| subtitle | varchar(160) | 副标题，如公司/技能分组/项目角色 |
+| period | varchar(64) | 时间范围 |
+| summary | text | 简短摘要 |
+| detail | text | 细节，可存放换行列表或 JSON 文本 |
+| tags | text | 标签 JSON 字符串，第一阶段用文本保存 |
+| visible | tinyint | 是否展示 |
+| sort_order | int | 排序 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
+### 3.0.3 resume_upload_task
+
+简历上传解析任务。用于上传读取、结构化预览、失败兜底和确认写入。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| filename | varchar(255) | 文件名 |
+| content_type | varchar(128) | 文件类型 |
+| status | varchar(32) | `PARSED` / `FALLBACK_REQUIRED` / `CONFIRMED` / `FAILED` |
+| raw_text | longtext | 原始文本 |
+| parsed_json | longtext | 结构化结果 JSON |
+| error_message | text | 失败原因或兜底提示 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
 
 ### 3.1 user
 

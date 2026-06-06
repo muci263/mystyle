@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, SyntheticEvent, useMemo, useRef, useState } from "react";
-import { Loader2, MessageSquarePlus, X } from "lucide-react";
-import { apiPost } from "@/lib/api";
-import type { BlogAnnotation } from "@/lib/api";
+import { Check, Loader2, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
+import { apiDelete, apiPost, apiPut } from "@/lib/api";
+import type { BlogAnnotation, BlogInteractionSummary } from "@/lib/api";
 
 type BlogArticleBodyClientProps = {
   slug: string;
@@ -27,6 +27,9 @@ export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: 
   const [annotations, setAnnotations] = useState(initialAnnotations);
   const [draft, setDraft] = useState<SelectionDraft | null>(null);
   const [note, setNote] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingNote, setEditingNote] = useState("");
+  const [pendingAction, setPendingAction] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -95,6 +98,52 @@ export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: 
     }
   }
 
+  function startEditing(annotation: BlogAnnotation) {
+    setEditingId(annotation.id);
+    setEditingNote(annotation.note);
+    setError("");
+  }
+
+  async function updateAnnotation(annotation: BlogAnnotation) {
+    if (!editingNote.trim()) {
+      setError("旁注内容不能为空");
+      return;
+    }
+    setPendingAction(`update-${annotation.id}`);
+    setError("");
+    try {
+      const nextAnnotation = await apiPut<BlogAnnotation>(`/public/blog-posts/${slug}/annotations/${annotation.id}`, {
+        anchorText: annotation.anchorText,
+        note: editingNote,
+      });
+      setAnnotations((current) => current.map((item) => item.id === annotation.id ? nextAnnotation : item));
+      setEditingId(null);
+      setEditingNote("");
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "旁注更新失败");
+    } finally {
+      setPendingAction("");
+    }
+  }
+
+  async function deleteAnnotation(annotationId: number) {
+    setPendingAction(`delete-${annotationId}`);
+    setError("");
+    try {
+      const nextSummary = await apiDelete<BlogInteractionSummary>(`/public/blog-posts/${slug}/annotations/${annotationId}`);
+      setAnnotations((current) => current.filter((item) => item.id !== annotationId));
+      window.dispatchEvent(new CustomEvent("blog-annotation-deleted", { detail: nextSummary }));
+      if (editingId === annotationId) {
+        setEditingId(null);
+        setEditingNote("");
+      }
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "旁注删除失败");
+    } finally {
+      setPendingAction("");
+    }
+  }
+
   return (
     <section
       ref={bodyRef}
@@ -118,6 +167,17 @@ export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: 
                   key={`${segment.text}-${segmentIndex}`}
                   text={segment.text}
                   annotations={segment.annotations}
+                  editingId={editingId}
+                  editingNote={editingNote}
+                  pendingAction={pendingAction}
+                  onStartEditing={startEditing}
+                  onCancelEditing={() => {
+                    setEditingId(null);
+                    setEditingNote("");
+                  }}
+                  onEditingNoteChange={setEditingNote}
+                  onUpdate={updateAnnotation}
+                  onDelete={deleteAnnotation}
                 />
               ) : (
                 <span key={`${segment.text}-${segmentIndex}`}>{segment.text}</span>
@@ -160,15 +220,81 @@ export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: 
   );
 }
 
-function AnnotatedText({ text, annotations }: { text: string; annotations: BlogAnnotation[] }) {
+function AnnotatedText({
+  text,
+  annotations,
+  editingId,
+  editingNote,
+  pendingAction,
+  onStartEditing,
+  onCancelEditing,
+  onEditingNoteChange,
+  onUpdate,
+  onDelete,
+}: {
+  text: string;
+  annotations: BlogAnnotation[];
+  editingId: number | null;
+  editingNote: string;
+  pendingAction: string;
+  onStartEditing: (annotation: BlogAnnotation) => void;
+  onCancelEditing: () => void;
+  onEditingNoteChange: (value: string) => void;
+  onUpdate: (annotation: BlogAnnotation) => void;
+  onDelete: (annotationId: number) => void;
+}) {
   return (
     <span className="annotated-text" tabIndex={0}>
       {text}
       <span className="annotation-tooltip" role="note">
         {annotations.map((annotation) => (
-          <span key={annotation.id} className="block">
-            <span className="block text-sm leading-6 text-white">{annotation.note}</span>
-            <span className="mt-2 block font-mono text-[10px] text-white/55">{annotation.createdAt}</span>
+          <span key={annotation.id} className="annotation-tooltip-item">
+            {editingId === annotation.id ? (
+              <>
+                <textarea
+                  value={editingNote}
+                  onChange={(event) => onEditingNoteChange(event.target.value)}
+                  className="min-h-24 w-full resize-none border border-white/15 bg-white/10 px-3 py-2 text-sm leading-6 text-white outline-none focus:border-white/45"
+                  aria-label="编辑旁注内容"
+                />
+                <span className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onUpdate(annotation)}
+                    disabled={pendingAction === `update-${annotation.id}` || !editingNote.trim()}
+                    className="annotation-action annotation-action-primary"
+                  >
+                    {pendingAction === `update-${annotation.id}` ? <Loader2 className="animate-spin" size={13} /> : <Check size={13} />}
+                    保存
+                  </button>
+                  <button type="button" onClick={onCancelEditing} className="annotation-action">
+                    <X size={13} />
+                    取消
+                  </button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="block text-sm leading-6 text-white">{annotation.note}</span>
+                <span className="mt-3 flex items-center justify-between gap-3">
+                  <span className="font-mono text-[10px] text-white/55">{annotation.createdAt}</span>
+                  <span className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => onStartEditing(annotation)} className="annotation-icon-action" aria-label="编辑旁注">
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(annotation.id)}
+                      disabled={pendingAction === `delete-${annotation.id}`}
+                      className="annotation-icon-action annotation-danger-action"
+                      aria-label="删除旁注"
+                    >
+                      {pendingAction === `delete-${annotation.id}` ? <Loader2 className="animate-spin" size={13} /> : <Trash2 size={13} />}
+                    </button>
+                  </span>
+                </span>
+              </>
+            )}
           </span>
         ))}
       </span>

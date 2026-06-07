@@ -14,6 +14,10 @@ INSERT INTO schema_version (version, description)
 VALUES ('0.5.0', 'resume content management module')
 ON DUPLICATE KEY UPDATE description = 'resume content management module';
 
+INSERT INTO schema_version (version, description)
+VALUES ('0.6.0', 'editable knowledge graph module')
+ON DUPLICATE KEY UPDATE description = 'editable knowledge graph module';
+
 DELETE FROM resume_section_item WHERE version_id IN (SELECT id FROM resume_version WHERE version_name = '默认草稿');
 DELETE FROM resume_basic_info WHERE version_id IN (SELECT id FROM resume_version WHERE version_name = '默认草稿');
 DELETE FROM resume_version WHERE version_name = '默认草稿';
@@ -172,3 +176,60 @@ INSERT INTO blog_like (post_id, client_key, created_at) VALUES
 (1, 'seed-redis-2', '2026-06-03 21:37:00'),
 (2, 'seed-ai-1', '2026-06-03 21:46:00'),
 (3, 'seed-devops-1', '2026-06-03 21:47:00');
+
+INSERT INTO knowledge_graph_node
+(node_key, label, node_type, level, summary, content, tags, href, source_type, source_slug, x, y, z, visible, sort_order)
+VALUES
+('me', '赵豪然', 'CORE', 0, 'Java 后端开发 / 山西大学 软件工程', '个人核心节点，关联履历、项目证据、面试助手与技术博客。', 'Java 后端开发,山西大学 软件工程 本科,Spring Boot,Redis', '', 'MANUAL', '', 0, 0, 0, 1, 1),
+('section-resume', '履历', 'SECTION', 1, '个人信息与经历', '个人信息、技术能力、获奖经历、实习经历、项目经历和个人优势。', 'Resume,Profile', '/resume', 'MANUAL', '', -3.2, 1.2, 0.4, 1, 10),
+('section-evidence', '项目证据', 'SECTION', 1, '项目经历与工程证据', '把项目拆成问题、方案、结果和可展示证据。', 'Project,Evidence', '/evidence', 'MANUAL', '', -2.5, -1.4, -0.4, 1, 20),
+('section-interview', '面试助手', 'SECTION', 1, '岗位适配与面试讲解', '围绕 JD 适配、讲解顺序和高频问题组织面试材料。', 'Interview,JD', '/interview-kit', 'MANUAL', '', 2.6, -1.2, 0.6, 1, 30),
+('section-blog', '技术博客', 'SECTION', 1, '技术复盘与学习笔记', '技术博客一级节点，下面关联具体文章和对应技术主题。', 'Blog,Notes', '/blog', 'MANUAL', '', 0, -2.55, -0.2, 1, 40),
+('skill-java', 'Java', 'SKILL', 2, '后端基础语言', '面向 Spring Boot、业务接口和工程化编码的基础能力。', 'Backend,Java', '', 'MANUAL', '', 3.65, 1.95, -0.75, 1, 101),
+('skill-spring-boot', 'Spring Boot', 'SKILL', 2, '后端应用框架', '用于接口开发、统一异常处理、参数校验和服务组织。', 'Backend,Spring', '', 'MANUAL', '', 3.9, 0.75, 0.55, 1, 102),
+('skill-redis', 'Redis', 'SKILL', 2, '缓存与高频写入削峰', '用于视频进度缓存、延迟同步、热点数据与幂等状态流转。', 'Cache,Redis', '', 'MANUAL', '', 1.55, -2.75, -0.7, 1, 103),
+('skill-mysql', 'MySQL', 'SKILL', 2, '关系型数据落库', '负责最终状态、可追溯数据和查询性能优化。', 'Database,MySQL', '', 'MANUAL', '', 2.75, -2.15, 0.4, 1, 104),
+('skill-ai', 'AI 工程化', 'SKILL', 2, 'RAG / SQL Bot / Agent', '将模型能力放进受约束的工程链路：工具调用、结果校验和日志追踪。', 'AI,RAG,Agent', '', 'MANUAL', '', 4.05, -0.55, -0.1, 1, 105),
+('project-mine-education-system', '矿山教育系统', 'PROJECT', 2, '学习闭环项目', '围绕视频学习、进度上报、Redis 缓存同步和状态流转形成项目证据。', 'Spring Boot,Redis,MySQL', '/projects/mine-education-system', 'PROJECT', 'mine-education-system', -3.75, -2.15, -0.15, 1, 201),
+('project-private-ai-platform', 'MaxKB + SqlBot 私有化 AI 管理平台', 'PROJECT', 2, 'AI 平台接入', '围绕私有化部署、SQL 智能问答、RAG 入库检索和 Agent 编排形成项目证据。', 'Docker,RAG,SQL Bot,Agent', '/projects/private-ai-platform', 'PROJECT', 'private-ai-platform', -4.1, -0.55, 0.85, 1, 202),
+('module-video-learning', 'Video Learning', 'MODULE', 2, '视频播放学习链路', '复现视频播放、进度上报、Redis 缓存、完播同步和状态流转。', 'Video Event,Redis,MySQL', '/lab/video-learning', 'MODULE', 'video-learning', 3.65, -2.15, 0.95, 1, 301),
+('module-cache-sync', 'Cache Sync', 'MODULE', 2, 'Redis 学习记录缓存同步', '展示高频写入削峰、延迟同步、重复写入减少和响应时间优化。', 'Redis,Delayed Task,Idempotent', '/lab/cache-sync', 'MODULE', 'cache-sync', 1.55, -2.95, -0.7, 1, 302),
+('module-agent-workflow', 'Agent Workflow', 'MODULE', 2, 'Agent 工作流编排', '模拟意图识别、工具路由、RAG/SQL 查询、模型回答和结果校验。', 'Agent,Tool Calling,RAG', '/lab/agent-workflow', 'MODULE', 'agent-workflow', 4.15, -0.95, -0.1, 1, 303),
+('blog-redis-video-progress-buffer', 'Redis 视频进度缓存复盘', 'BLOG', 2, '为什么视频进度上报不应该直接写 MySQL', '过程态放 Redis，结果态落 MySQL，用幂等 key 和完播优先级保证数据可靠。', 'Redis,MySQL,缓存同步', '/blog/redis-video-progress-buffer', 'BLOG', 'redis-video-progress-buffer', -0.95, -3.35, 0.3, 1, 401),
+('blog-rag-sqlbot-agent-boundary', 'RAG / SQL Bot / Agent 边界', 'BLOG', 2, 'RAG、SQL Bot 和 Agent 的职责边界', 'RAG 负责非结构化检索，SQL Bot 负责结构化查询，Agent 负责调度和结果校验。', 'RAG,SQL Bot,Agent', '/blog/rag-sqlbot-agent-boundary', 'BLOG', 'rag-sqlbot-agent-boundary', 0.1, -3.55, -0.65, 1, 402),
+('blog-portfolio-docker-deploy-notes', 'Docker 全栈部署复盘', 'BLOG', 2, '把作品集做成 Docker 全栈项目的复盘', '记录 Next.js、Spring Boot、MySQL、Redis、Nginx 和 Docker Compose 的全链路部署。', 'Docker,Nginx,Spring Boot', '/blog/portfolio-docker-deploy-notes', 'BLOG', 'portfolio-docker-deploy-notes', 1.15, -3.35, 0.35, 1, 403)
+ON DUPLICATE KEY UPDATE node_key = node_key;
+
+INSERT INTO knowledge_graph_edge
+(from_node_key, to_node_key, relation_type, visible, sort_order)
+VALUES
+('me', 'section-resume', 'OWNS', 1, 10),
+('me', 'section-evidence', 'OWNS', 1, 20),
+('me', 'section-interview', 'OWNS', 1, 30),
+('me', 'section-blog', 'OWNS', 1, 40),
+('section-resume', 'skill-java', 'INCLUDES', 1, 101),
+('section-resume', 'skill-spring-boot', 'INCLUDES', 1, 102),
+('section-resume', 'skill-redis', 'INCLUDES', 1, 103),
+('section-resume', 'skill-mysql', 'INCLUDES', 1, 104),
+('section-resume', 'skill-ai', 'INCLUDES', 1, 105),
+('section-evidence', 'project-mine-education-system', 'INCLUDES', 1, 201),
+('section-evidence', 'project-private-ai-platform', 'INCLUDES', 1, 202),
+('section-evidence', 'module-video-learning', 'INCLUDES', 1, 301),
+('section-evidence', 'module-cache-sync', 'INCLUDES', 1, 302),
+('section-evidence', 'module-agent-workflow', 'INCLUDES', 1, 303),
+('section-interview', 'project-mine-education-system', 'USES', 1, 501),
+('section-interview', 'project-private-ai-platform', 'USES', 1, 502),
+('section-blog', 'blog-redis-video-progress-buffer', 'CONTAINS', 1, 401),
+('section-blog', 'blog-rag-sqlbot-agent-boundary', 'CONTAINS', 1, 402),
+('section-blog', 'blog-portfolio-docker-deploy-notes', 'CONTAINS', 1, 403),
+('blog-redis-video-progress-buffer', 'skill-redis', 'EXPLAINS', 1, 601),
+('blog-redis-video-progress-buffer', 'skill-mysql', 'EXPLAINS', 1, 602),
+('blog-rag-sqlbot-agent-boundary', 'skill-ai', 'EXPLAINS', 1, 603),
+('blog-portfolio-docker-deploy-notes', 'skill-spring-boot', 'EXPLAINS', 1, 604),
+('project-mine-education-system', 'skill-redis', 'USES', 1, 701),
+('project-mine-education-system', 'skill-mysql', 'USES', 1, 702),
+('project-private-ai-platform', 'skill-ai', 'USES', 1, 703),
+('module-video-learning', 'skill-redis', 'USES', 1, 801),
+('module-cache-sync', 'skill-redis', 'USES', 1, 802),
+('module-agent-workflow', 'skill-ai', 'USES', 1, 803)
+ON DUPLICATE KEY UPDATE from_node_key = from_node_key;

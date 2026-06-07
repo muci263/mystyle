@@ -13,11 +13,16 @@ import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.Evidence;
 import com.mystyle.portfolio.content.ContentModels.Experience;
 import com.mystyle.portfolio.content.ContentModels.InterviewGuide;
+import com.mystyle.portfolio.content.ContentModels.KnowledgeGraphEdge;
+import com.mystyle.portfolio.content.ContentModels.KnowledgeGraphNode;
+import com.mystyle.portfolio.content.ContentModels.KnowledgeGraphView;
 import com.mystyle.portfolio.content.ContentModels.ModuleDemo;
 import com.mystyle.portfolio.content.ContentModels.Profile;
 import com.mystyle.portfolio.content.ContentModels.Project;
 import com.mystyle.portfolio.content.ContentModels.SkillGroup;
 import com.mystyle.portfolio.content.ContentModels.TimelineItem;
+import com.mystyle.portfolio.knowledge.KnowledgeGraphEdgeRequest;
+import com.mystyle.portfolio.knowledge.KnowledgeGraphNodeRequest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -289,6 +294,166 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
     return blogInteractionSummaryById(postId);
   }
 
+  @Override
+  public KnowledgeGraphView knowledgeGraph() {
+    List<KnowledgeGraphNode> nodes = knowledgeGraphNodes(false);
+    List<String> visibleNodeKeys = nodes.stream().map(KnowledgeGraphNode::nodeKey).toList();
+    List<KnowledgeGraphEdge> edges = knowledgeGraphEdges(false).stream()
+        .filter(edge -> visibleNodeKeys.contains(edge.fromNodeKey()) && visibleNodeKeys.contains(edge.toNodeKey()))
+        .toList();
+    return new KnowledgeGraphView(nodes, edges);
+  }
+
+  @Override
+  public List<KnowledgeGraphNode> knowledgeGraphNodes(boolean includeHidden) {
+    String visibilityClause = includeHidden ? "" : "WHERE visible = 1";
+    return jdbcTemplate.query(
+        """
+        SELECT node_key, label, node_type, level, summary, content, tags, href, source_type, source_slug,
+               x, y, z, visible, sort_order
+        FROM knowledge_graph_node
+        %s
+        ORDER BY level, sort_order, id
+        """.formatted(visibilityClause),
+        (rs, rowNum) -> knowledgeGraphNode(rs));
+  }
+
+  @Override
+  public KnowledgeGraphNode createKnowledgeGraphNode(KnowledgeGraphNodeRequest request) {
+    assertUniqueNodeKey(request.nodeKey());
+    jdbcTemplate.update(
+        """
+        INSERT INTO knowledge_graph_node
+        (node_key, label, node_type, level, summary, content, tags, href, source_type, source_slug,
+         x, y, z, visible, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        normalizedNodeKey(request.nodeKey()),
+        request.label().trim(),
+        request.nodeType().trim().toUpperCase(Locale.ROOT),
+        request.level(),
+        trimOrEmpty(request.summary()),
+        trimOrEmpty(request.content()),
+        csv(request.tags()),
+        trimOrEmpty(request.href()),
+        trimOrDefault(request.sourceType(), "MANUAL").toUpperCase(Locale.ROOT),
+        trimOrEmpty(request.sourceSlug()),
+        request.x(),
+        request.y(),
+        request.z(),
+        bool(request.visible()),
+        request.sortOrder());
+    return knowledgeGraphNode(normalizedNodeKey(request.nodeKey()));
+  }
+
+  @Override
+  public KnowledgeGraphNode updateKnowledgeGraphNode(String nodeKey, KnowledgeGraphNodeRequest request) {
+    String currentKey = normalizedNodeKey(nodeKey);
+    assertNodeExists(currentKey);
+    String nextKey = normalizedNodeKey(request.nodeKey());
+    if (!currentKey.equals(nextKey)) {
+      assertUniqueNodeKey(nextKey);
+    }
+    jdbcTemplate.update(
+        """
+        UPDATE knowledge_graph_node
+        SET node_key = ?, label = ?, node_type = ?, level = ?, summary = ?, content = ?, tags = ?,
+            href = ?, source_type = ?, source_slug = ?, x = ?, y = ?, z = ?, visible = ?,
+            sort_order = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE node_key = ?
+        """,
+        nextKey,
+        request.label().trim(),
+        request.nodeType().trim().toUpperCase(Locale.ROOT),
+        request.level(),
+        trimOrEmpty(request.summary()),
+        trimOrEmpty(request.content()),
+        csv(request.tags()),
+        trimOrEmpty(request.href()),
+        trimOrDefault(request.sourceType(), "MANUAL").toUpperCase(Locale.ROOT),
+        trimOrEmpty(request.sourceSlug()),
+        request.x(),
+        request.y(),
+        request.z(),
+        bool(request.visible()),
+        request.sortOrder(),
+        currentKey);
+    if (!currentKey.equals(nextKey)) {
+      jdbcTemplate.update("UPDATE knowledge_graph_edge SET from_node_key = ? WHERE from_node_key = ?", nextKey, currentKey);
+      jdbcTemplate.update("UPDATE knowledge_graph_edge SET to_node_key = ? WHERE to_node_key = ?", nextKey, currentKey);
+    }
+    return knowledgeGraphNode(nextKey);
+  }
+
+  @Override
+  public void deleteKnowledgeGraphNode(String nodeKey) {
+    String normalized = normalizedNodeKey(nodeKey);
+    assertNodeExists(normalized);
+    jdbcTemplate.update("DELETE FROM knowledge_graph_edge WHERE from_node_key = ? OR to_node_key = ?", normalized, normalized);
+    jdbcTemplate.update("DELETE FROM knowledge_graph_node WHERE node_key = ?", normalized);
+  }
+
+  @Override
+  public List<KnowledgeGraphEdge> knowledgeGraphEdges(boolean includeHidden) {
+    String visibilityClause = includeHidden ? "" : "WHERE visible = 1";
+    return jdbcTemplate.query(
+        """
+        SELECT id, from_node_key, to_node_key, relation_type, visible, sort_order
+        FROM knowledge_graph_edge
+        %s
+        ORDER BY sort_order, id
+        """.formatted(visibilityClause),
+        (rs, rowNum) -> knowledgeGraphEdge(rs));
+  }
+
+  @Override
+  public KnowledgeGraphEdge createKnowledgeGraphEdge(KnowledgeGraphEdgeRequest request) {
+    assertNodeExists(request.fromNodeKey());
+    assertNodeExists(request.toNodeKey());
+    assertUniqueEdge(request);
+    jdbcTemplate.update(
+        """
+        INSERT INTO knowledge_graph_edge (from_node_key, to_node_key, relation_type, visible, sort_order)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        normalizedNodeKey(request.fromNodeKey()),
+        normalizedNodeKey(request.toNodeKey()),
+        trimOrDefault(request.relationType(), "RELATED").toUpperCase(Locale.ROOT),
+        bool(request.visible()),
+        request.sortOrder());
+    return latestKnowledgeGraphEdge();
+  }
+
+  @Override
+  public KnowledgeGraphEdge updateKnowledgeGraphEdge(long edgeId, KnowledgeGraphEdgeRequest request) {
+    assertEdgeExists(edgeId);
+    assertNodeExists(request.fromNodeKey());
+    assertNodeExists(request.toNodeKey());
+    assertUniqueEdge(edgeId, request);
+    jdbcTemplate.update(
+        """
+        UPDATE knowledge_graph_edge
+        SET from_node_key = ?, to_node_key = ?, relation_type = ?, visible = ?,
+            sort_order = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        normalizedNodeKey(request.fromNodeKey()),
+        normalizedNodeKey(request.toNodeKey()),
+        trimOrDefault(request.relationType(), "RELATED").toUpperCase(Locale.ROOT),
+        bool(request.visible()),
+        request.sortOrder(),
+        edgeId);
+    return knowledgeGraphEdge(edgeId);
+  }
+
+  @Override
+  public void deleteKnowledgeGraphEdge(long edgeId) {
+    int rows = jdbcTemplate.update("DELETE FROM knowledge_graph_edge WHERE id = ?", edgeId);
+    if (rows == 0) {
+      throw ApiException.notFound("图谱关系不存在");
+    }
+  }
+
   private Project project(ResultSet rs) throws SQLException {
     long projectId = rs.getLong("id");
     return new Project(
@@ -355,6 +520,115 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
         rs.getString("anchor_text"),
         rs.getString("note"),
         dateTimeString(rs, "created_at"));
+  }
+
+  private KnowledgeGraphNode knowledgeGraphNode(ResultSet rs) throws SQLException {
+    return new KnowledgeGraphNode(
+        rs.getString("node_key"),
+        rs.getString("label"),
+        rs.getString("node_type"),
+        rs.getInt("level"),
+        rs.getString("summary"),
+        rs.getString("content"),
+        csvValues(rs.getString("tags")),
+        rs.getString("href"),
+        rs.getString("source_type"),
+        rs.getString("source_slug"),
+        rs.getDouble("x"),
+        rs.getDouble("y"),
+        rs.getDouble("z"),
+        rs.getBoolean("visible"),
+        rs.getInt("sort_order"));
+  }
+
+  private KnowledgeGraphEdge knowledgeGraphEdge(ResultSet rs) throws SQLException {
+    return new KnowledgeGraphEdge(
+        rs.getLong("id"),
+        rs.getString("from_node_key"),
+        rs.getString("to_node_key"),
+        rs.getString("relation_type"),
+        rs.getBoolean("visible"),
+        rs.getInt("sort_order"));
+  }
+
+  private KnowledgeGraphNode knowledgeGraphNode(String nodeKey) {
+    return jdbcTemplate.query(
+            """
+            SELECT node_key, label, node_type, level, summary, content, tags, href, source_type, source_slug,
+                   x, y, z, visible, sort_order
+            FROM knowledge_graph_node
+            WHERE node_key = ?
+            """,
+            (rs, rowNum) -> knowledgeGraphNode(rs),
+            normalizedNodeKey(nodeKey))
+        .stream()
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("图谱节点不存在"));
+  }
+
+  private KnowledgeGraphEdge knowledgeGraphEdge(long edgeId) {
+    return jdbcTemplate.query(
+            """
+            SELECT id, from_node_key, to_node_key, relation_type, visible, sort_order
+            FROM knowledge_graph_edge
+            WHERE id = ?
+            """,
+            (rs, rowNum) -> knowledgeGraphEdge(rs),
+            edgeId)
+        .stream()
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("图谱关系不存在"));
+  }
+
+  private KnowledgeGraphEdge latestKnowledgeGraphEdge() {
+    return jdbcTemplate.queryForObject(
+        """
+        SELECT id, from_node_key, to_node_key, relation_type, visible, sort_order
+        FROM knowledge_graph_edge
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (rs, rowNum) -> knowledgeGraphEdge(rs));
+  }
+
+  private void assertNodeExists(String nodeKey) {
+    if (count("SELECT COUNT(*) FROM knowledge_graph_node WHERE node_key = ?", normalizedNodeKey(nodeKey)) == 0) {
+      throw ApiException.notFound("图谱节点不存在");
+    }
+  }
+
+  private void assertEdgeExists(long edgeId) {
+    if (count("SELECT COUNT(*) FROM knowledge_graph_edge WHERE id = ?", edgeId) == 0) {
+      throw ApiException.notFound("图谱关系不存在");
+    }
+  }
+
+  private void assertUniqueNodeKey(String nodeKey) {
+    if (count("SELECT COUNT(*) FROM knowledge_graph_node WHERE node_key = ?", normalizedNodeKey(nodeKey)) > 0) {
+      throw ApiException.badRequest("图谱节点 key 已存在");
+    }
+  }
+
+  private void assertUniqueEdge(KnowledgeGraphEdgeRequest request) {
+    assertUniqueEdge(0, request);
+  }
+
+  private void assertUniqueEdge(long currentEdgeId, KnowledgeGraphEdgeRequest request) {
+    if (normalizedNodeKey(request.fromNodeKey()).equals(normalizedNodeKey(request.toNodeKey()))) {
+      throw ApiException.badRequest("图谱关系不能连接同一个节点");
+    }
+    int duplicateCount = count(
+        """
+        SELECT COUNT(*) FROM knowledge_graph_edge
+        WHERE from_node_key = ? AND to_node_key = ? AND relation_type = ? AND id <> ?
+        """,
+        normalizedNodeKey(request.fromNodeKey()),
+        normalizedNodeKey(request.toNodeKey()),
+        trimOrDefault(request.relationType(), "RELATED").toUpperCase(Locale.ROOT),
+        currentEdgeId);
+    if (duplicateCount > 0) {
+      throw ApiException.badRequest("图谱关系已存在");
+    }
   }
 
   private String dateString(ResultSet rs, String column) throws SQLException {
@@ -492,5 +766,43 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
 
   private List<String> strings(String sql, Object... args) {
     return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString(1), args);
+  }
+
+  private String normalizedNodeKey(String value) {
+    return trimOrEmpty(value).toLowerCase(Locale.ROOT);
+  }
+
+  private String trimOrEmpty(String value) {
+    return value == null ? "" : value.trim();
+  }
+
+  private String trimOrDefault(String value, String defaultValue) {
+    String trimmed = trimOrEmpty(value);
+    return trimmed.isBlank() ? defaultValue : trimmed;
+  }
+
+  private int bool(boolean value) {
+    return value ? 1 : 0;
+  }
+
+  private String csv(List<String> values) {
+    if (values == null || values.isEmpty()) {
+      return "";
+    }
+    return values.stream()
+        .filter(value -> value != null && !value.isBlank())
+        .map(String::trim)
+        .distinct()
+        .collect(Collectors.joining(","));
+  }
+
+  private List<String> csvValues(String value) {
+    if (value == null || value.isBlank()) {
+      return List.of();
+    }
+    return Arrays.stream(value.split(","))
+        .map(String::trim)
+        .filter(item -> !item.isBlank())
+        .toList();
   }
 }

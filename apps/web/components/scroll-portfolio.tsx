@@ -4,14 +4,14 @@ import Link from "next/link";
 import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
 import { ArrowDown, ArrowUpRight, Blocks, BrainCircuit, Database, GitBranch, PlayCircle } from "lucide-react";
 import { PointerEvent as ReactPointerEvent, ReactNode, useRef } from "react";
-import { HeroScene } from "@/components/hero-scene";
+import { KnowledgeGraphScene } from "@/components/knowledge-graph-scene";
 import type { HomeView, Project } from "@/lib/api";
 
 const labIcons = [PlayCircle, Database, BrainCircuit, Blocks, GitBranch];
 
 export function ScrollPortfolio({ home }: { home: HomeView }) {
   const reduceMotion = Boolean(useReducedMotion());
-  const { featuredProjects, moduleDemos, profile } = home;
+  const { featuredProjects, moduleDemos, profile, skills } = home;
   const heroRef = useRef<HTMLElement>(null);
   const labRef = useRef<HTMLElement>(null);
   const { scrollYProgress: pageScroll } = useScroll();
@@ -23,8 +23,6 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
   const smoothHero = useSpring(heroScroll, { stiffness: 100, damping: 25, mass: 0.35 });
   const heroContentY = useTransform(smoothHero, [0, 1], [0, -72]);
   const heroContentOpacity = useTransform(smoothHero, [0, 0.66, 1], [1, 0.82, 0]);
-  const heroCanvasScale = useTransform(smoothHero, [0, 1], [1, 1.14]);
-  const heroCanvasY = useTransform(smoothHero, [0, 1], [0, 56]);
   const rawGlowX = useMotionValue(1060);
   const rawGlowY = useMotionValue(360);
   const glowX = useSpring(rawGlowX, { stiffness: 110, damping: 28, mass: 0.28 });
@@ -65,47 +63,38 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
         onPointerMove={moveHeroSpotlight}
         onPointerLeave={resetHeroSpotlight}
       >
-        <motion.div
-          className="scroll-transform absolute inset-0"
-          style={reduceMotion ? undefined : { scale: heroCanvasScale, y: heroCanvasY }}
-        >
-          <HeroScene />
-        </motion.div>
+        <div className="knowledge-graph-backdrop">
+          <KnowledgeGraphScene graph={home.knowledgeGraph} />
+        </div>
         {!reduceMotion && (
           <motion.div aria-hidden="true" className="hero-spotlight pointer-events-none absolute inset-0 hidden md:block" style={{ background: spotlight }} />
         )}
         <div aria-hidden="true" className="hero-scan pointer-events-none absolute inset-0 hidden md:block" />
         <motion.div
-          className="scroll-transform relative z-10 mx-auto flex min-h-[calc(100svh-72px)] max-w-7xl flex-col justify-between px-5 py-9 md:px-8 md:pb-12 md:pt-11"
+          className="scroll-transform pointer-events-none relative z-10 mx-auto flex min-h-[calc(100svh-72px)] max-w-7xl flex-col justify-between px-5 py-9 md:px-8 md:pb-12 md:pt-11"
           style={reduceMotion ? undefined : { opacity: heroContentOpacity, y: heroContentY }}
         >
           <Reveal disabled={reduceMotion}>
             <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.23em] text-white/56">
-              <span>Java Backend Engineer</span>
-              <span className="hidden md:block">Shanxi University / 2026 Portfolio</span>
+              <span>Knowledge Graph</span>
+              <span className="hidden md:block">Shanxi University / Software Engineering</span>
             </div>
           </Reveal>
 
-          <div className="max-w-5xl pb-3">
+          <div className="knowledge-basic-card">
             <Reveal disabled={reduceMotion}>
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[#82aaff]">{profile.name} / Engineering Evidence</p>
-              <h1 className="display mt-7 text-balance text-[clamp(3.6rem,9.2vw,8.4rem)] leading-[0.92] text-white">
-                Backend evidence,
-                <br />
-                live portfolio.
-              </h1>
-            </Reveal>
-            <Reveal disabled={reduceMotion} delay={0.11}>
-              <div className="mt-9 flex flex-col gap-8 border-t border-white/16 pt-7 md:flex-row md:items-end md:justify-between">
-                <p className="font-mono text-[11px] uppercase tracking-[0.26em] text-white/58">Spring Boot / Redis / AI Engineering / Docker</p>
-                <div className="flex flex-wrap gap-3">
-                  <Link href="/evidence" className="rounded-full bg-white px-6 py-3 text-sm font-medium text-ink transition hover:bg-[#dbe7ff]">
-                    项目证据
-                  </Link>
-                  <Link href="/lab" className="rounded-full border border-white/26 px-6 py-3 text-sm font-medium text-white transition hover:border-white/60">
-                    经典功能复现
-                  </Link>
-                </div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#82aaff]">Personal Core</p>
+              <h1 className="display mt-4 text-5xl leading-none text-white md:text-6xl">{profile.name}</h1>
+              <div className="mt-5 space-y-2 text-sm text-white/70">
+                <p>{profile.title}</p>
+                <p>{profile.education}</p>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {Array.from(new Set([...profile.tags, ...skills.flatMap((group) => group.items)])).slice(0, 4).map((tag) => (
+                  <span key={tag} className="knowledge-hero-tag">
+                    {tag}
+                  </span>
+                ))}
               </div>
             </Reveal>
           </div>

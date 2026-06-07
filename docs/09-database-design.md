@@ -100,6 +100,46 @@ operation_log
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
 
+### 3.0.4 knowledge_graph_node
+
+首页三维知识图谱节点表。用于把个人核心、一级板块、技术能力、项目、模块复现、技术博客文章统一建模，前端按该表渲染节点。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| node_key | varchar(128) | 节点业务标识，唯一 |
+| label | varchar(160) | 节点显示标题 |
+| node_type | varchar(32) | `CORE` / `SECTION` / `SKILL` / `PROJECT` / `MODULE` / `BLOG` |
+| level | int | 节点层级，0 为个人核心，1 为一级板块，2 为子节点 |
+| summary | text | 简短说明 |
+| content | text | 悬停/点击节点时展示的具体内容 |
+| tags | text | 逗号分隔标签 |
+| href | varchar(255) | 关联前端路径，可为空 |
+| source_type | varchar(32) | 来源类型，如 `MANUAL` / `PROJECT` / `MODULE` / `BLOG` |
+| source_slug | varchar(128) | 来源业务 slug，可为空 |
+| x / y / z | double | 3D 图谱坐标 |
+| visible | tinyint | 是否前台展示 |
+| sort_order | int | 排序 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
+默认数据中 `section-blog` 表示导航 04 技术博客，博客文章节点使用 `node_type = BLOG`，并通过边表挂在 `section-blog` 下。
+
+### 3.0.5 knowledge_graph_edge
+
+首页三维知识图谱关系表。用于描述节点之间的父子、包含、使用、解释等关系。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| from_node_key | varchar(128) | 起点节点 key |
+| to_node_key | varchar(128) | 终点节点 key |
+| relation_type | varchar(64) | `OWNS` / `INCLUDES` / `CONTAINS` / `USES` / `EXPLAINS` 等 |
+| visible | tinyint | 是否前台展示 |
+| sort_order | int | 排序 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
 ### 3.1 user
 
 管理员用户表。

@@ -105,6 +105,55 @@ GET /api/public/home?variantId=1
 - Skills
 - Experience Snapshot
 - Variant 内容，可为空
+- KnowledgeGraph：首页三维个人知识图谱，包含 `nodes` 和 `edges`
+
+### 3.1.1 获取首页知识图谱
+
+```http
+GET /api/public/knowledge-graph
+```
+
+响应：
+
+```json
+{
+  "nodes": [
+    {
+      "nodeKey": "section-blog",
+      "label": "技术博客",
+      "nodeType": "SECTION",
+      "level": 1,
+      "summary": "技术复盘与学习笔记",
+      "content": "技术博客一级节点，下面关联具体文章和对应技术主题。",
+      "tags": ["Blog", "Notes"],
+      "href": "/blog",
+      "sourceType": "MANUAL",
+      "sourceSlug": "",
+      "x": 0,
+      "y": -2.55,
+      "z": -0.2,
+      "visible": true,
+      "sortOrder": 40
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "fromNodeKey": "section-blog",
+      "toNodeKey": "blog-redis-video-progress-buffer",
+      "relationType": "CONTAINS",
+      "visible": true,
+      "sortOrder": 401
+    }
+  ]
+}
+```
+
+说明：
+
+- `section-blog` 对应顶部导航 04 技术博客。
+- 博客文章作为 `BLOG` 子节点，通过 `CONTAINS` 关系挂在 `section-blog` 下。
+- 前端 hover/click 节点时展示 `content`，不需要额外请求文章列表接口。
 
 ### 3.2 获取在线简历
 
@@ -306,6 +355,64 @@ POST /api/admin/resume/uploads/{taskId}/confirm
 - 能识别标题关键词：返回 `PARSED`，生成结构化预览。
 - 无法识别板块：返回 `FALLBACK_REQUIRED`，保留原始文本和默认个人优势条目，等待人工确认。
 - 只有调用 confirm 后，解析结果才写入草稿版本。
+
+## 5.2 首页知识图谱管理接口（第一阶段实现）
+
+第一阶段暂不接入复杂登录鉴权，但接口统一放在 `/api/admin` 下，后续可直接挂 JWT 过滤器。
+
+### 5.2.1 节点 CRUD
+
+```http
+GET    /api/admin/knowledge-graph/nodes?includeHidden=true
+POST   /api/admin/knowledge-graph/nodes
+PUT    /api/admin/knowledge-graph/nodes/{nodeKey}
+DELETE /api/admin/knowledge-graph/nodes/{nodeKey}
+```
+
+节点请求：
+
+```json
+{
+  "nodeKey": "blog-test-note",
+  "label": "测试博客节点",
+  "nodeType": "BLOG",
+  "level": 2,
+  "summary": "用于测试的图谱博客节点",
+  "content": "悬停节点时展示这段具体内容。",
+  "tags": ["Test", "Blog"],
+  "href": "/blog/test-note",
+  "sourceType": "BLOG",
+  "sourceSlug": "test-note",
+  "x": 1.2,
+  "y": -3.6,
+  "z": 0.2,
+  "visible": true,
+  "sortOrder": 999
+}
+```
+
+### 5.2.2 关系 CRUD
+
+```http
+GET    /api/admin/knowledge-graph/edges?includeHidden=true
+POST   /api/admin/knowledge-graph/edges
+PUT    /api/admin/knowledge-graph/edges/{edgeId}
+DELETE /api/admin/knowledge-graph/edges/{edgeId}
+```
+
+关系请求：
+
+```json
+{
+  "fromNodeKey": "section-blog",
+  "toNodeKey": "blog-test-note",
+  "relationType": "CONTAINS",
+  "visible": true,
+  "sortOrder": 1000
+}
+```
+
+删除节点时会同步删除相关边；更新节点 `nodeKey` 时会同步更新相关边，避免图谱断链。
 
 ## 6. 工作模块复现实验室接口
 

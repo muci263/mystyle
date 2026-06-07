@@ -111,12 +111,45 @@ export type BlogInteractionSummary = {
   annotationCount: number;
 };
 
+export type KnowledgeGraphNode = {
+  nodeKey: string;
+  label: string;
+  nodeType: "CORE" | "SECTION" | "SKILL" | "PROJECT" | "MODULE" | "BLOG" | string;
+  level: number;
+  summary: string;
+  content: string;
+  tags: string[];
+  href: string;
+  sourceType: string;
+  sourceSlug: string;
+  x: number;
+  y: number;
+  z: number;
+  visible: boolean;
+  sortOrder: number;
+};
+
+export type KnowledgeGraphEdge = {
+  id: number;
+  fromNodeKey: string;
+  toNodeKey: string;
+  relationType: string;
+  visible: boolean;
+  sortOrder: number;
+};
+
+export type KnowledgeGraphView = {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+};
+
 export type HomeView = {
   profile: Profile;
   skills: SkillGroup[];
   featuredProjects: Project[];
   moduleDemos: ModuleDemo[];
   interviewGuide: InterviewGuide;
+  knowledgeGraph: KnowledgeGraphView;
 };
 
 export type ResumeView = {

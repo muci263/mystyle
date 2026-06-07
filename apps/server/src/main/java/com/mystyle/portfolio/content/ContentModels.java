@@ -108,12 +108,45 @@ public final class ContentModels {
       int annotationCount) {
   }
 
+  public record KnowledgeGraphNode(
+      String nodeKey,
+      String label,
+      String nodeType,
+      int level,
+      String summary,
+      String content,
+      List<String> tags,
+      String href,
+      String sourceType,
+      String sourceSlug,
+      double x,
+      double y,
+      double z,
+      boolean visible,
+      int sortOrder) {
+  }
+
+  public record KnowledgeGraphEdge(
+      long id,
+      String fromNodeKey,
+      String toNodeKey,
+      String relationType,
+      boolean visible,
+      int sortOrder) {
+  }
+
+  public record KnowledgeGraphView(
+      List<KnowledgeGraphNode> nodes,
+      List<KnowledgeGraphEdge> edges) {
+  }
+
   public record HomeView(
       Profile profile,
       List<SkillGroup> skills,
       List<Project> featuredProjects,
       List<ModuleDemo> moduleDemos,
-      InterviewGuide interviewGuide) {
+      InterviewGuide interviewGuide,
+      KnowledgeGraphView knowledgeGraph) {
   }
 
   public record ResumeView(

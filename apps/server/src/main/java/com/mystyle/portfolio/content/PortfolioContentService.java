@@ -12,10 +12,15 @@ import com.mystyle.portfolio.content.ContentModels.BlogInteractionSummary;
 import com.mystyle.portfolio.content.ContentModels.BlogPost;
 import com.mystyle.portfolio.content.ContentModels.HomeView;
 import com.mystyle.portfolio.content.ContentModels.InterviewGuide;
+import com.mystyle.portfolio.content.ContentModels.KnowledgeGraphEdge;
+import com.mystyle.portfolio.content.ContentModels.KnowledgeGraphNode;
+import com.mystyle.portfolio.content.ContentModels.KnowledgeGraphView;
 import com.mystyle.portfolio.content.ContentModels.ModuleDemo;
 import com.mystyle.portfolio.content.ContentModels.Project;
 import com.mystyle.portfolio.content.ContentModels.ResumeView;
 import com.mystyle.portfolio.content.ContentModels.TimelineItem;
+import com.mystyle.portfolio.knowledge.KnowledgeGraphEdgeRequest;
+import com.mystyle.portfolio.knowledge.KnowledgeGraphNodeRequest;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
@@ -34,7 +39,8 @@ public class PortfolioContentService {
         repository.skills(),
         repository.projects(),
         repository.moduleDemos(),
-        repository.interviewGuide());
+        repository.interviewGuide(),
+        repository.knowledgeGraph());
   }
 
   public ResumeView resume() {
@@ -144,6 +150,42 @@ public class PortfolioContentService {
 
   public BlogInteractionSummary likeBlogPost(String slug) {
     return repository.likeBlogPost(slug);
+  }
+
+  public KnowledgeGraphView knowledgeGraph() {
+    return repository.knowledgeGraph();
+  }
+
+  public List<KnowledgeGraphNode> knowledgeGraphNodes(boolean includeHidden) {
+    return repository.knowledgeGraphNodes(includeHidden);
+  }
+
+  public KnowledgeGraphNode createKnowledgeGraphNode(KnowledgeGraphNodeRequest request) {
+    return repository.createKnowledgeGraphNode(request);
+  }
+
+  public KnowledgeGraphNode updateKnowledgeGraphNode(String nodeKey, KnowledgeGraphNodeRequest request) {
+    return repository.updateKnowledgeGraphNode(nodeKey, request);
+  }
+
+  public void deleteKnowledgeGraphNode(String nodeKey) {
+    repository.deleteKnowledgeGraphNode(nodeKey);
+  }
+
+  public List<KnowledgeGraphEdge> knowledgeGraphEdges(boolean includeHidden) {
+    return repository.knowledgeGraphEdges(includeHidden);
+  }
+
+  public KnowledgeGraphEdge createKnowledgeGraphEdge(KnowledgeGraphEdgeRequest request) {
+    return repository.createKnowledgeGraphEdge(request);
+  }
+
+  public KnowledgeGraphEdge updateKnowledgeGraphEdge(long edgeId, KnowledgeGraphEdgeRequest request) {
+    return repository.updateKnowledgeGraphEdge(edgeId, request);
+  }
+
+  public void deleteKnowledgeGraphEdge(long edgeId) {
+    repository.deleteKnowledgeGraphEdge(edgeId);
   }
 
   private boolean containsIgnoreCase(List<String> values, String keyword) {

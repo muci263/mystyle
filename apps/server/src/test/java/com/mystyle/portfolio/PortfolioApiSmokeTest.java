@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.hasItem;
 
 import com.mystyle.portfolio.analytics.AnalyticsController;
 import com.mystyle.portfolio.analytics.AnalyticsService;
@@ -20,6 +21,7 @@ import com.mystyle.portfolio.health.HealthController;
 import com.mystyle.portfolio.health.HealthService;
 import com.mystyle.portfolio.jd.JdAnalysisService;
 import com.mystyle.portfolio.jd.JdController;
+import com.mystyle.portfolio.knowledge.KnowledgeGraphController;
 import com.mystyle.portfolio.moduleDemo.AgentWorkflowController;
 import com.mystyle.portfolio.moduleDemo.AgentWorkflowService;
 import com.mystyle.portfolio.moduleDemo.ModuleDemoController;
@@ -78,6 +80,7 @@ class PortfolioApiSmokeTest {
             new ProjectController(contentService),
             new ModuleDemoController(contentService),
             new BlogController(contentService),
+            new KnowledgeGraphController(contentService),
             new ResumeAdminController(resumeAdminService),
             new ResumePublicController(resumeAdminService),
             new JdController(jdAnalysisService),
@@ -105,7 +108,8 @@ class PortfolioApiSmokeTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.code").value(0))
         .andExpect(jsonPath("$.data.profile.name").value("赵豪然"))
-        .andExpect(jsonPath("$.data.featuredProjects[0].slug").value("mine-education-system"));
+        .andExpect(jsonPath("$.data.featuredProjects[0].slug").value("mine-education-system"))
+        .andExpect(jsonPath("$.data.knowledgeGraph.nodes[0].nodeKey").value("me"));
 
     mockMvc.perform(get("/public/projects/mine-education-system"))
         .andExpect(status().isOk())
@@ -114,6 +118,91 @@ class PortfolioApiSmokeTest {
     mockMvc.perform(get("/public/module-demos").param("tech", "Redis"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data[0].slug").value("video-learning"));
+  }
+
+  @Test
+  void knowledgeGraphShouldExposeBlogChildrenAndSupportCrud() throws Exception {
+    mockMvc.perform(get("/public/knowledge-graph"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.nodes[*].nodeKey", hasItem("section-blog")))
+        .andExpect(jsonPath("$.data.nodes[*].nodeKey", hasItem("blog-redis-video-progress-buffer")))
+        .andExpect(jsonPath("$.data.edges[*].toNodeKey", hasItem("blog-redis-video-progress-buffer")))
+        .andExpect(jsonPath("$.data.edges[*].relationType", hasItem("CONTAINS")));
+
+    mockMvc.perform(post("/admin/knowledge-graph/nodes")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "nodeKey": "blog-test-note",
+                  "label": "测试博客节点",
+                  "nodeType": "BLOG",
+                  "level": 2,
+                  "summary": "用于测试的图谱博客节点",
+                  "content": "悬停节点时展示这段具体内容。",
+                  "tags": ["Test", "Blog"],
+                  "href": "/blog/test-note",
+                  "sourceType": "BLOG",
+                  "sourceSlug": "test-note",
+                  "x": 1.2,
+                  "y": -3.6,
+                  "z": 0.2,
+                  "visible": true,
+                  "sortOrder": 999
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.nodeKey").value("blog-test-note"));
+
+    mockMvc.perform(put("/admin/knowledge-graph/nodes/blog-test-note")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "nodeKey": "blog-test-note",
+                  "label": "测试博客节点更新",
+                  "nodeType": "BLOG",
+                  "level": 2,
+                  "summary": "更新后的测试节点",
+                  "content": "更新后的悬停展示内容。",
+                  "tags": ["Updated", "Blog"],
+                  "href": "/blog/test-note",
+                  "sourceType": "BLOG",
+                  "sourceSlug": "test-note",
+                  "x": 1.3,
+                  "y": -3.5,
+                  "z": 0.1,
+                  "visible": true,
+                  "sortOrder": 1000
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.label").value("测试博客节点更新"))
+        .andExpect(jsonPath("$.data.content").value("更新后的悬停展示内容。"));
+
+    String edgeResponse = mockMvc.perform(post("/admin/knowledge-graph/edges")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "fromNodeKey": "section-blog",
+                  "toNodeKey": "blog-test-note",
+                  "relationType": "CONTAINS",
+                  "visible": true,
+                  "sortOrder": 1000
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.fromNodeKey").value("section-blog"))
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
+
+    long edgeId = edgeResponse.contains("\"id\":") ? Long.parseLong(edgeResponse.replaceAll(".*\\\"id\\\":(\\d+).*", "$1")) : 0;
+    mockMvc.perform(delete("/admin/knowledge-graph/edges/{edgeId}", edgeId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data").value("DELETED"));
+
+    mockMvc.perform(delete("/admin/knowledge-graph/nodes/blog-test-note"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data").value("DELETED"));
   }
 
   @Test

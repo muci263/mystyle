@@ -181,23 +181,23 @@ INSERT INTO knowledge_graph_node
 (node_key, label, node_type, level, summary, content, tags, href, source_type, source_slug, x, y, z, visible, sort_order)
 VALUES
 ('me', '赵豪然', 'CORE', 0, 'Java 后端开发 / 山西大学 软件工程', '个人核心节点，关联履历、项目证据、面试助手与技术博客。', 'Java 后端开发,山西大学 软件工程 本科,Spring Boot,Redis', '', 'MANUAL', '', 0, 0, 0, 1, 1),
-('section-resume', '履历', 'SECTION', 1, '个人信息与经历', '个人信息、技术能力、获奖经历、实习经历、项目经历和个人优势。', 'Resume,Profile', '/resume', 'MANUAL', '', -3.2, 1.2, 0.4, 1, 10),
-('section-evidence', '项目证据', 'SECTION', 1, '项目经历与工程证据', '把项目拆成问题、方案、结果和可展示证据。', 'Project,Evidence', '/evidence', 'MANUAL', '', -2.5, -1.4, -0.4, 1, 20),
-('section-interview', '面试助手', 'SECTION', 1, '岗位适配与面试讲解', '围绕 JD 适配、讲解顺序和高频问题组织面试材料。', 'Interview,JD', '/interview-kit', 'MANUAL', '', 2.6, -1.2, 0.6, 1, 30),
-('section-blog', '技术博客', 'SECTION', 1, '技术复盘与学习笔记', '技术博客一级节点，下面关联具体文章和对应技术主题。', 'Blog,Notes', '/blog', 'MANUAL', '', 0, -2.55, -0.2, 1, 40),
-('skill-java', 'Java', 'SKILL', 2, '后端基础语言', '面向 Spring Boot、业务接口和工程化编码的基础能力。', 'Backend,Java', '', 'MANUAL', '', 3.65, 1.95, -0.75, 1, 101),
-('skill-spring-boot', 'Spring Boot', 'SKILL', 2, '后端应用框架', '用于接口开发、统一异常处理、参数校验和服务组织。', 'Backend,Spring', '', 'MANUAL', '', 3.9, 0.75, 0.55, 1, 102),
-('skill-redis', 'Redis', 'SKILL', 2, '缓存与高频写入削峰', '用于视频进度缓存、延迟同步、热点数据与幂等状态流转。', 'Cache,Redis', '', 'MANUAL', '', 1.55, -2.75, -0.7, 1, 103),
-('skill-mysql', 'MySQL', 'SKILL', 2, '关系型数据落库', '负责最终状态、可追溯数据和查询性能优化。', 'Database,MySQL', '', 'MANUAL', '', 2.75, -2.15, 0.4, 1, 104),
-('skill-ai', 'AI 工程化', 'SKILL', 2, 'RAG / SQL Bot / Agent', '将模型能力放进受约束的工程链路：工具调用、结果校验和日志追踪。', 'AI,RAG,Agent', '', 'MANUAL', '', 4.05, -0.55, -0.1, 1, 105),
-('project-mine-education-system', '矿山教育系统', 'PROJECT', 2, '学习闭环项目', '围绕视频学习、进度上报、Redis 缓存同步和状态流转形成项目证据。', 'Spring Boot,Redis,MySQL', '/projects/mine-education-system', 'PROJECT', 'mine-education-system', -3.75, -2.15, -0.15, 1, 201),
-('project-private-ai-platform', 'MaxKB + SqlBot 私有化 AI 管理平台', 'PROJECT', 2, 'AI 平台接入', '围绕私有化部署、SQL 智能问答、RAG 入库检索和 Agent 编排形成项目证据。', 'Docker,RAG,SQL Bot,Agent', '/projects/private-ai-platform', 'PROJECT', 'private-ai-platform', -4.1, -0.55, 0.85, 1, 202),
-('module-video-learning', 'Video Learning', 'MODULE', 2, '视频播放学习链路', '复现视频播放、进度上报、Redis 缓存、完播同步和状态流转。', 'Video Event,Redis,MySQL', '/lab/video-learning', 'MODULE', 'video-learning', 3.65, -2.15, 0.95, 1, 301),
-('module-cache-sync', 'Cache Sync', 'MODULE', 2, 'Redis 学习记录缓存同步', '展示高频写入削峰、延迟同步、重复写入减少和响应时间优化。', 'Redis,Delayed Task,Idempotent', '/lab/cache-sync', 'MODULE', 'cache-sync', 1.55, -2.95, -0.7, 1, 302),
-('module-agent-workflow', 'Agent Workflow', 'MODULE', 2, 'Agent 工作流编排', '模拟意图识别、工具路由、RAG/SQL 查询、模型回答和结果校验。', 'Agent,Tool Calling,RAG', '/lab/agent-workflow', 'MODULE', 'agent-workflow', 4.15, -0.95, -0.1, 1, 303),
-('blog-redis-video-progress-buffer', 'Redis 视频进度缓存复盘', 'BLOG', 2, '为什么视频进度上报不应该直接写 MySQL', '过程态放 Redis，结果态落 MySQL，用幂等 key 和完播优先级保证数据可靠。', 'Redis,MySQL,缓存同步', '/blog/redis-video-progress-buffer', 'BLOG', 'redis-video-progress-buffer', -0.95, -3.35, 0.3, 1, 401),
-('blog-rag-sqlbot-agent-boundary', 'RAG / SQL Bot / Agent 边界', 'BLOG', 2, 'RAG、SQL Bot 和 Agent 的职责边界', 'RAG 负责非结构化检索，SQL Bot 负责结构化查询，Agent 负责调度和结果校验。', 'RAG,SQL Bot,Agent', '/blog/rag-sqlbot-agent-boundary', 'BLOG', 'rag-sqlbot-agent-boundary', 0.1, -3.55, -0.65, 1, 402),
-('blog-portfolio-docker-deploy-notes', 'Docker 全栈部署复盘', 'BLOG', 2, '把作品集做成 Docker 全栈项目的复盘', '记录 Next.js、Spring Boot、MySQL、Redis、Nginx 和 Docker Compose 的全链路部署。', 'Docker,Nginx,Spring Boot', '/blog/portfolio-docker-deploy-notes', 'BLOG', 'portfolio-docker-deploy-notes', 1.15, -3.35, 0.35, 1, 403)
+('section-resume', '履历', 'SECTION', 1, '个人信息与经历', '个人信息、技术能力、获奖经历、实习经历、项目经历和个人优势。', 'Resume,Profile', '/resume', 'MANUAL', '', -2.85, 1.42, 0.22, 1, 10),
+('section-evidence', '项目证据', 'SECTION', 1, '项目经历与工程证据', '把项目拆成问题、方案、结果和可展示证据。', 'Project,Evidence', '/evidence', 'MANUAL', '', -2.85, -1.42, -0.18, 1, 20),
+('section-interview', '面试助手', 'SECTION', 1, '岗位适配与面试讲解', '围绕 JD 适配、讲解顺序和高频问题组织面试材料。', 'Interview,JD', '/interview-kit', 'MANUAL', '', 2.85, -1.42, 0.18, 1, 30),
+('section-blog', '技术博客', 'SECTION', 1, '技术复盘与学习笔记', '技术博客一级节点，下面关联具体文章和对应技术主题。', 'Blog,Notes', '/blog', 'MANUAL', '', 2.85, 1.42, -0.22, 1, 40),
+('skill-java', 'Java', 'SKILL', 2, '后端基础语言', '面向 Spring Boot、业务接口和工程化编码的基础能力。', 'Backend,Java', '', 'MANUAL', '', -0.95, 3.15, 0.4, 1, 101),
+('skill-spring-boot', 'Spring Boot', 'SKILL', 2, '后端应用框架', '用于接口开发、统一异常处理、参数校验和服务组织。', 'Backend,Spring', '', 'MANUAL', '', 0.55, 3.28, -0.35, 1, 102),
+('skill-redis', 'Redis', 'SKILL', 2, '缓存与高频写入削峰', '用于视频进度缓存、延迟同步、热点数据与幂等状态流转。', 'Cache,Redis', '', 'MANUAL', '', 2.05, 2.75, 0.35, 1, 103),
+('skill-mysql', 'MySQL', 'SKILL', 2, '关系型数据落库', '负责最终状态、可追溯数据和查询性能优化。', 'Database,MySQL', '', 'MANUAL', '', 3.65, 0.22, -0.25, 1, 104),
+('skill-ai', 'AI 工程化', 'SKILL', 2, 'RAG / SQL Bot / Agent', '将模型能力放进受约束的工程链路：工具调用、结果校验和日志追踪。', 'AI,RAG,Agent', '', 'MANUAL', '', 3.75, -0.72, 0.38, 1, 105),
+('project-mine-education-system', '矿山教育系统', 'PROJECT', 2, '学习闭环项目', '围绕视频学习、进度上报、Redis 缓存同步和状态流转形成项目证据。', 'Spring Boot,Redis,MySQL', '/projects/mine-education-system', 'PROJECT', 'mine-education-system', -4.28, -2.42, 0.16, 1, 201),
+('project-private-ai-platform', 'MaxKB + SqlBot 私有化 AI 管理平台', 'PROJECT', 2, 'AI 平台接入', '围绕私有化部署、SQL 智能问答、RAG 入库检索和 Agent 编排形成项目证据。', 'Docker,RAG,SQL Bot,Agent', '/projects/private-ai-platform', 'PROJECT', 'private-ai-platform', -4.35, 0.05, -0.42, 1, 202),
+('module-video-learning', 'Video Learning', 'MODULE', 2, '视频播放学习链路', '复现视频播放、进度上报、Redis 缓存、完播同步和状态流转。', 'Video Event,Redis,MySQL', '/lab/video-learning', 'MODULE', 'video-learning', 1.25, -3.18, 0.42, 1, 301),
+('module-cache-sync', 'Cache Sync', 'MODULE', 2, 'Redis 学习记录缓存同步', '展示高频写入削峰、延迟同步、重复写入减少和响应时间优化。', 'Redis,Delayed Task,Idempotent', '/lab/cache-sync', 'MODULE', 'cache-sync', 2.65, -2.85, -0.45, 1, 302),
+('module-agent-workflow', 'Agent Workflow', 'MODULE', 2, 'Agent 工作流编排', '模拟意图识别、工具路由、RAG/SQL 查询、模型回答和结果校验。', 'Agent,Tool Calling,RAG', '/lab/agent-workflow', 'MODULE', 'agent-workflow', 4.05, -2.05, 0.28, 1, 303),
+('blog-redis-video-progress-buffer', 'Redis 视频进度缓存复盘', 'BLOG', 2, '为什么视频进度上报不应该直接写 MySQL', '过程态放 Redis，结果态落 MySQL，用幂等 key 和完播优先级保证数据可靠。', 'Redis,MySQL,缓存同步', '/blog/redis-video-progress-buffer', 'BLOG', 'redis-video-progress-buffer', 4.12, 2.55, 0.35, 1, 401),
+('blog-rag-sqlbot-agent-boundary', 'RAG / SQL Bot / Agent 边界', 'BLOG', 2, 'RAG、SQL Bot 和 Agent 的职责边界', 'RAG 负责非结构化检索，SQL Bot 负责结构化查询，Agent 负责调度和结果校验。', 'RAG,SQL Bot,Agent', '/blog/rag-sqlbot-agent-boundary', 'BLOG', 'rag-sqlbot-agent-boundary', 4.65, 1.18, -0.48, 1, 402),
+('blog-portfolio-docker-deploy-notes', 'Docker 全栈部署复盘', 'BLOG', 2, '把作品集做成 Docker 全栈项目的复盘', '记录 Next.js、Spring Boot、MySQL、Redis、Nginx 和 Docker Compose 的全链路部署。', 'Docker,Nginx,Spring Boot', '/blog/portfolio-docker-deploy-notes', 'BLOG', 'portfolio-docker-deploy-notes', 3.35, 3.08, -0.22, 1, 403)
 ON DUPLICATE KEY UPDATE node_key = node_key;
 
 INSERT INTO knowledge_graph_edge

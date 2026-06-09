@@ -6,6 +6,7 @@ import com.mystyle.portfolio.content.ContentModels.Project;
 import com.mystyle.portfolio.content.PortfolioContentService;
 import com.mystyle.portfolio.jd.JdAnalysisResponse.ModuleRecommendation;
 import com.mystyle.portfolio.jd.JdAnalysisResponse.ProjectRecommendation;
+import com.mystyle.portfolio.llm.LlmService;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,9 +26,11 @@ public class JdAnalysisService {
   private final AtomicLong idGenerator = new AtomicLong(1);
   private final Map<Long, JdAnalysisResponse> analyses = new ConcurrentHashMap<>();
   private final PortfolioContentService contentService;
+  private final LlmService llmService;
 
-  public JdAnalysisService(PortfolioContentService contentService) {
+  public JdAnalysisService(PortfolioContentService contentService, LlmService llmService) {
     this.contentService = contentService;
+    this.llmService = llmService;
   }
 
   public JdAnalysisResponse analyze(JdAnalyzeRequest request) {
@@ -45,7 +48,7 @@ public class JdAnalysisService {
 
     JdAnalysisResponse response = new JdAnalysisResponse(
         analysisId,
-        "mock-rule-provider",
+        llmService.providerName(),
         role,
         List.copyOf(keywords),
         matchScore,
@@ -64,7 +67,7 @@ public class JdAnalysisService {
                 buildModuleReason(module, keywords)))
             .toList(),
         List.of(
-            "当前为规则型 mock Provider，未调用真实 LLM。",
+            llmService.configured() ? "已启用 Minimax Provider，生成内容仍需基于真实经历核验。" : "当前为规则型 mock Provider，未调用真实 LLM。",
             "生成内容只基于已有经历资产，不能新增未验证经历。",
             "后续接入真实 LLM 后需要保留来源支撑和人工确认。"));
     analyses.put(analysisId, response);

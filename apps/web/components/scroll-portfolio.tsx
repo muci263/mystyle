@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
-import { ArrowDown, ArrowUpRight, Blocks, BrainCircuit, Database, GitBranch, PlayCircle } from "lucide-react";
-import { PointerEvent as ReactPointerEvent, ReactNode, useRef } from "react";
+import { ArrowDown, ArrowUpRight, Blocks, BrainCircuit, Database, GitBranch, PencilLine, PlayCircle } from "lucide-react";
+import { PointerEvent as ReactPointerEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { KnowledgeGraphScene } from "@/components/knowledge-graph-scene";
+import type { KnowledgeGraphFocusedNode } from "@/components/knowledge-graph-scene";
 import type { HomeView, Project } from "@/lib/api";
 
 const labIcons = [PlayCircle, Database, BrainCircuit, Blocks, GitBranch];
@@ -12,8 +13,10 @@ const labIcons = [PlayCircle, Database, BrainCircuit, Blocks, GitBranch];
 export function ScrollPortfolio({ home }: { home: HomeView }) {
   const reduceMotion = Boolean(useReducedMotion());
   const { featuredProjects, moduleDemos, profile, skills } = home;
+  const [focusedNode, setFocusedNode] = useState<KnowledgeGraphFocusedNode | null>(null);
   const heroRef = useRef<HTMLElement>(null);
   const labRef = useRef<HTMLElement>(null);
+  const hideNodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { scrollYProgress: pageScroll } = useScroll();
   const smoothPageProgress = useSpring(pageScroll, { stiffness: 120, damping: 26, mass: 0.28 });
   const { scrollYProgress: heroScroll } = useScroll({
@@ -34,6 +37,32 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
   });
   const smoothLab = useSpring(labScroll, { stiffness: 100, damping: 24, mass: 0.34 });
   const labBackgroundY = useTransform(smoothLab, [0, 1], [42, 0]);
+  const heroTags = Array.from(new Set([...profile.tags, ...skills.flatMap((group) => group.items)])).slice(0, 4);
+  const activeNode = focusedNode;
+  const activeLinks = focusedNode?.relatedCount ?? 0;
+
+  const handleNodeFocus = useCallback((node: KnowledgeGraphFocusedNode) => {
+    if (hideNodeTimerRef.current) {
+      clearTimeout(hideNodeTimerRef.current);
+      hideNodeTimerRef.current = null;
+    }
+    setFocusedNode(node);
+  }, []);
+
+  const handleNodeBlur = useCallback(() => {
+    if (hideNodeTimerRef.current) {
+      clearTimeout(hideNodeTimerRef.current);
+    }
+    hideNodeTimerRef.current = setTimeout(() => setFocusedNode(null), 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hideNodeTimerRef.current) {
+        clearTimeout(hideNodeTimerRef.current);
+      }
+    };
+  }, []);
 
   function moveHeroSpotlight(event: ReactPointerEvent<HTMLElement>) {
     if (reduceMotion) return;
@@ -59,19 +88,19 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
 
       <section
         ref={heroRef}
-        className="hero-stage relative isolate min-h-[calc(100svh-72px)] overflow-hidden"
+        className="hero-stage relative isolate min-h-screen overflow-hidden"
         onPointerMove={moveHeroSpotlight}
         onPointerLeave={resetHeroSpotlight}
       >
         <div className="knowledge-graph-backdrop">
-          <KnowledgeGraphScene graph={home.knowledgeGraph} />
+          <KnowledgeGraphScene graph={home.knowledgeGraph} onNodeFocus={handleNodeFocus} onNodeBlur={handleNodeBlur} />
         </div>
         {!reduceMotion && (
           <motion.div aria-hidden="true" className="hero-spotlight pointer-events-none absolute inset-0 hidden md:block" style={{ background: spotlight }} />
         )}
         <div aria-hidden="true" className="hero-scan pointer-events-none absolute inset-0 hidden md:block" />
         <motion.div
-          className="scroll-transform pointer-events-none relative z-10 mx-auto flex min-h-[calc(100svh-72px)] max-w-7xl flex-col justify-between px-5 py-9 md:px-8 md:pb-12 md:pt-11"
+          className="knowledge-hero-overlay scroll-transform pointer-events-none relative z-10 mx-auto flex min-h-screen max-w-[100rem] flex-col px-5 pb-12 pt-28 md:px-8"
           style={reduceMotion ? undefined : { opacity: heroContentOpacity, y: heroContentY }}
         >
           <Reveal disabled={reduceMotion}>
@@ -81,22 +110,49 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
             </div>
           </Reveal>
 
-          <div className="knowledge-basic-card">
-            <Reveal disabled={reduceMotion}>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#82aaff]">Personal Core</p>
-              <h1 className="display mt-4 text-5xl leading-none text-white md:text-6xl">{profile.name}</h1>
-              <div className="mt-5 space-y-2 text-sm text-white/70">
+          <div className="knowledge-hero-layout">
+            <Reveal disabled={reduceMotion} className="knowledge-side-panel knowledge-profile-panel pointer-events-auto">
+              <p className="knowledge-panel-kicker">Personal Core</p>
+              <h1 className="display knowledge-panel-title">{profile.name}</h1>
+              <div className="knowledge-panel-lines">
                 <p>{profile.title}</p>
                 <p>{profile.education}</p>
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
-                {Array.from(new Set([...profile.tags, ...skills.flatMap((group) => group.items)])).slice(0, 4).map((tag) => (
+                {heroTags.map((tag) => (
                   <span key={tag} className="knowledge-hero-tag">
                     {tag}
                   </span>
                 ))}
               </div>
             </Reveal>
+
+            {activeNode ? (
+              <Reveal disabled={reduceMotion} className="knowledge-side-panel knowledge-detail-panel pointer-events-auto">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="knowledge-panel-kicker">{activeNode.nodeType}</p>
+                  <span className="knowledge-link-count">{String(activeLinks).padStart(2, "0")} links</span>
+                </div>
+                <h2 className="display knowledge-detail-title">{activeNode.label}</h2>
+                <p className="knowledge-detail-copy">{activeNode.summary || activeNode.content}</p>
+                {activeNode.tags.length ? (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {activeNode.tags.slice(0, 4).map((tag) => (
+                      <span key={tag} className="knowledge-hero-tag">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <Link
+                  href={`/admin/knowledge-graph?nodeId=${encodeURIComponent(activeNode.nodeKey)}`}
+                  className="knowledge-manage-link"
+                >
+                  <PencilLine size={14} />
+                  管理节点
+                </Link>
+              </Reveal>
+            ) : null}
           </div>
         </motion.div>
         <div className="absolute bottom-8 right-8 z-10 hidden items-center gap-3 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45 lg:flex">
@@ -226,9 +282,20 @@ function ProjectExhibit({ project, disabled, index }: { project: Project; disabl
   );
 }
 
-function Reveal({ children, disabled, delay = 0 }: { children: ReactNode; disabled: boolean; delay?: number }) {
+function Reveal({
+  children,
+  disabled,
+  delay = 0,
+  className,
+}: {
+  children: ReactNode;
+  disabled: boolean;
+  delay?: number;
+  className?: string;
+}) {
   return (
     <motion.div
+      className={className}
       initial={disabled ? false : { opacity: 0, y: 46 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.18 }}

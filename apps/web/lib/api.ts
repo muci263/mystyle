@@ -143,6 +143,73 @@ export type KnowledgeGraphView = {
   edges: KnowledgeGraphEdge[];
 };
 
+export type KnowledgeGraphNodePayload = {
+  nodeKey: string;
+  label: string;
+  nodeType: string;
+  level: number;
+  summary: string;
+  content: string;
+  tags: string[];
+  href: string;
+  sourceType: string;
+  sourceSlug: string;
+  x: number;
+  y: number;
+  z: number;
+  visible: boolean;
+  sortOrder: number;
+};
+
+export type KnowledgeGraphEdgePayload = {
+  fromNodeKey: string;
+  toNodeKey: string;
+  relationType: string;
+  visible: boolean;
+  sortOrder: number;
+};
+
+export type KnowledgeGraphSmartNodePayload = {
+  nodeKey?: string;
+  label: string;
+  nodeType: string;
+  summary: string;
+  content?: string;
+  tags: string[];
+  href?: string;
+  sourceType?: string;
+  sourceSlug?: string;
+  level?: number;
+  x?: number;
+  y?: number;
+  z?: number;
+  visible?: boolean;
+  sortOrder?: number;
+};
+
+export type KnowledgeRelationSuggestion = {
+  fromNodeKey: string;
+  toNodeKey: string;
+  relationType: string;
+  reason: string;
+};
+
+export type KnowledgeGraphAutoRelateResponse = {
+  provider: string;
+  node: KnowledgeGraphNode;
+  suggestions: KnowledgeRelationSuggestion[];
+  createdEdges: KnowledgeGraphEdge[];
+  notes: string[];
+};
+
+export type LlmProviderStatus = {
+  provider: string;
+  configured: boolean;
+  textModel: string;
+  visionModel: string;
+  mode: string;
+};
+
 export type HomeView = {
   profile: Profile;
   skills: SkillGroup[];

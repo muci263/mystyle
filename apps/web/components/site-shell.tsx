@@ -13,10 +13,10 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen">
       <PointerTrail />
-      <nav className="sticky top-0 z-40 border-b border-line bg-stonepaper/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 md:px-8">
+      <nav className="site-nav-pill">
+        <div className="mx-auto flex h-full items-center justify-between px-4 md:px-5">
           <Link href="/" className="flex items-center gap-3 text-ink">
-            <span className="flex h-9 w-9 items-center justify-center bg-ink font-mono text-[11px] font-semibold text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-ink font-mono text-[11px] font-semibold text-white shadow-sm">
               ZH
             </span>
             <span>
@@ -58,7 +58,7 @@ export function PageHeader({
         <span className="subpage-signal-axis" />
         <span className="subpage-signal-core" />
       </div>
-      <div className="relative z-10 mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24">
+      <div className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-32 md:px-8 md:pb-24 md:pt-36">
         <FadeIn>
           <p className="eyebrow technical-label">{eyebrow}</p>
           <h1 className="display mt-7 max-w-5xl text-5xl leading-[1.04] text-white md:text-8xl">

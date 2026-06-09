@@ -20,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class KnowledgeGraphController {
   private final PortfolioContentService contentService;
+  private final KnowledgeGraphSmartService smartService;
 
-  public KnowledgeGraphController(PortfolioContentService contentService) {
+  public KnowledgeGraphController(PortfolioContentService contentService, KnowledgeGraphSmartService smartService) {
     this.contentService = contentService;
+    this.smartService = smartService;
   }
 
   @GetMapping("/public/knowledge-graph")
@@ -39,6 +41,17 @@ public class KnowledgeGraphController {
   @PostMapping("/admin/knowledge-graph/nodes")
   public ApiResponse<KnowledgeGraphNode> createNode(@Valid @RequestBody KnowledgeGraphNodeRequest request) {
     return ApiResponse.success(contentService.createKnowledgeGraphNode(request));
+  }
+
+  @PostMapping("/admin/knowledge-graph/nodes/smart-create")
+  public ApiResponse<KnowledgeGraphAutoRelateResponse> smartCreateNode(
+      @Valid @RequestBody KnowledgeGraphSmartNodeRequest request) {
+    return ApiResponse.success(smartService.smartCreate(request));
+  }
+
+  @PostMapping("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate")
+  public ApiResponse<KnowledgeGraphAutoRelateResponse> autoRelateNode(@PathVariable("nodeKey") String nodeKey) {
+    return ApiResponse.success(smartService.autoRelate(nodeKey));
   }
 
   @PutMapping("/admin/knowledge-graph/nodes/{nodeKey}")

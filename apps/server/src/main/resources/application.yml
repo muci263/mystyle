@@ -29,3 +29,9 @@ springdoc:
 app:
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://192.168.*.*:3000,http://192.168.*.*:3001}
+  llm:
+    minimax:
+      api-key: ${MINIMAX_API_KEY:}
+      base-url: ${MINIMAX_BASE_URL:https://api.minimax.io/v1}
+      text-model: ${MINIMAX_TEXT_MODEL:MiniMax-M1}
+      vision-model: ${MINIMAX_VISION_MODEL:MiniMax-Text-01}

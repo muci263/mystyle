@@ -22,6 +22,9 @@ import com.mystyle.portfolio.health.HealthService;
 import com.mystyle.portfolio.jd.JdAnalysisService;
 import com.mystyle.portfolio.jd.JdController;
 import com.mystyle.portfolio.knowledge.KnowledgeGraphController;
+import com.mystyle.portfolio.knowledge.KnowledgeGraphSmartService;
+import com.mystyle.portfolio.llm.LlmController;
+import com.mystyle.portfolio.llm.LlmService;
 import com.mystyle.portfolio.moduleDemo.AgentWorkflowController;
 import com.mystyle.portfolio.moduleDemo.AgentWorkflowService;
 import com.mystyle.portfolio.moduleDemo.ModuleDemoController;
@@ -67,7 +70,9 @@ class PortfolioApiSmokeTest {
     ObjectMapper objectMapper = new ObjectMapper();
     PortfolioContentService contentService = new PortfolioContentService(new JdbcPortfolioContentRepository(jdbcTemplate));
     ResumeAdminService resumeAdminService = new ResumeAdminService(new JdbcResumeAdminRepository(jdbcTemplate, objectMapper), objectMapper);
-    JdAnalysisService jdAnalysisService = new JdAnalysisService(contentService);
+    LlmService llmService = new LlmService(objectMapper, "", "https://api.minimax.io/v1", "MiniMax-M1", "MiniMax-Text-01");
+    KnowledgeGraphSmartService knowledgeGraphSmartService = new KnowledgeGraphSmartService(contentService, llmService);
+    JdAnalysisService jdAnalysisService = new JdAnalysisService(contentService, llmService);
     VideoLearningService videoLearningService = new VideoLearningService();
     AgentWorkflowService agentWorkflowService = new AgentWorkflowService();
     AnalyticsService analyticsService = new AnalyticsService();
@@ -80,10 +85,11 @@ class PortfolioApiSmokeTest {
             new ProjectController(contentService),
             new ModuleDemoController(contentService),
             new BlogController(contentService),
-            new KnowledgeGraphController(contentService),
+            new KnowledgeGraphController(contentService, knowledgeGraphSmartService),
             new ResumeAdminController(resumeAdminService),
             new ResumePublicController(resumeAdminService),
             new JdController(jdAnalysisService),
+            new LlmController(llmService),
             new VideoLearningController(videoLearningService),
             new AgentWorkflowController(agentWorkflowService),
             new AnalyticsController(analyticsService))
@@ -203,6 +209,35 @@ class PortfolioApiSmokeTest {
     mockMvc.perform(delete("/admin/knowledge-graph/nodes/blog-test-note"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data").value("DELETED"));
+  }
+
+  @Test
+  void knowledgeGraphSmartCreateShouldUseFallbackProviderAndAutoRelate() throws Exception {
+    mockMvc.perform(get("/llm/status"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.provider").value("mock-rule-provider"))
+        .andExpect(jsonPath("$.data.configured").value(false));
+
+    mockMvc.perform(post("/admin/knowledge-graph/nodes/smart-create")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "label": "智能建边测试",
+                  "nodeType": "BLOG",
+                  "summary": "Redis 与 MySQL 缓存同步的测试节点",
+                  "tags": ["Redis", "MySQL"],
+                  "visible": true
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.provider").value("mock-rule-provider"))
+        .andExpect(jsonPath("$.data.node.nodeType").value("BLOG"))
+        .andExpect(jsonPath("$.data.createdEdges[0].relationType").exists());
+
+    mockMvc.perform(post("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate", "blog-redis-video-progress-buffer"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.provider").value("mock-rule-provider"))
+        .andExpect(jsonPath("$.data.node.nodeKey").value("blog-redis-video-progress-buffer"));
   }
 
   @Test

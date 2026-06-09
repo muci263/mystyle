@@ -15,6 +15,12 @@ infra
 docs
 ```
 
+## Project Overview
+
+完整项目规划、已实现功能、后续待对接事项和上手路径见：
+
+- [docs/15-project-overview-and-roadmap.md](docs/15-project-overview-and-roadmap.md)
+
 ## Local Commands
 
 ```bash

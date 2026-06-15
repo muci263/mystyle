@@ -3,6 +3,7 @@ package com.mystyle.portfolio.resume;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mystyle.portfolio.common.ApiException;
+import com.mystyle.portfolio.llm.LlmService;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeBasicInfo;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeDraftView;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeParsedPayload;
@@ -25,10 +26,12 @@ public class ResumeAdminService {
 
   private final ResumeAdminRepository repository;
   private final ObjectMapper objectMapper;
+  private final LlmService llmService;
 
-  public ResumeAdminService(ResumeAdminRepository repository, ObjectMapper objectMapper) {
+  public ResumeAdminService(ResumeAdminRepository repository, ObjectMapper objectMapper, LlmService llmService) {
     this.repository = repository;
     this.objectMapper = objectMapper;
+    this.llmService = llmService;
   }
 
   public ResumeDraftView draft() {
@@ -79,20 +82,20 @@ public class ResumeAdminService {
           "上传内容为空，无法解析");
     }
 
-    ResumeParsedPayload payload = parseRawText(rawText);
+    boolean allowFallback = Boolean.TRUE.equals(request.allowFallback());
+    ResumeParsedPayload payload = allowFallback ? parseRawText(rawText) : llmService.parseResumeText(rawText);
     String parsedJson = toJson(payload);
     boolean hasStructuredSections = payload.sections().values().stream().anyMatch(items -> !items.isEmpty());
-    String status = hasStructuredSections ? "PARSED" : "FALLBACK_REQUIRED";
-    String message = hasStructuredSections
-        ? "已完成基础结构化解析，请确认后写入草稿"
-        : "未识别出明确简历板块，已保留原文作为个人优势兜底条目";
+    if (!hasStructuredSections) {
+      throw ApiException.upstream("没有返回可写入的简历板块；本次不会生成替代任务。");
+    }
     return repository.createUploadTask(
         request.filename(),
         contentType(request.contentType()),
         rawText,
-        status,
+        "PARSED",
         parsedJson,
-        message);
+        allowFallback ? "已按用户确认使用规则解析，请确认后写入草稿" : "Minimax 已完成真实结构化扫描，请确认后写入草稿");
   }
 
   public ResumeDraftView confirmUploadTask(long taskId) {
@@ -134,11 +137,11 @@ public class ResumeAdminService {
     if (sections.values().stream().allMatch(List::isEmpty)) {
       sections.put(ResumeSectionType.ADVANTAGE, List.of(new ResumeSectionItemRequest(
           "待人工整理的简历原文",
-          "上传解析兜底",
+          "用户确认规则解析",
           "",
-          "系统未识别出明确板块，先保留原文，等待人工确认。",
+          "系统未识别出明确板块，保留原文等待人工确认。",
           rawText,
-          List.of("Fallback"),
+          List.of("Manual Review"),
           true,
           1)));
     }
@@ -191,13 +194,13 @@ public class ResumeAdminService {
   private ResumeBasicInfoRequest basicInfoFrom(String rawText, List<String> lines) {
     String name = lines.isEmpty() ? "待确认" : trimTo(lines.getFirst(), 64);
     String title = rawText.contains("Java") ? "Java 后端开发" : "待确认求职方向";
-    String email = find(EMAIL_PATTERN, rawText, "placeholder@example.com");
+    String email = find(EMAIL_PATTERN, rawText, "");
     String phone = find(PHONE_PATTERN, rawText, "");
     String education = rawText.contains("山西大学") ? "山西大学 软件工程 本科" : "待确认教育经历";
     return new ResumeBasicInfoRequest(
         name,
         title,
-        "由简历上传解析生成，请人工确认后发布。",
+        "由用户确认的规则解析生成，请人工确认后发布。",
         email,
         phone,
         "",
@@ -249,13 +252,7 @@ public class ResumeAdminService {
       title = title.substring(0, title.indexOf(","));
     }
     if (title.isBlank()) {
-      return switch (type) {
-        case SKILL -> "技术能力";
-        case AWARD -> "获奖经历";
-        case INTERNSHIP -> "实习经历";
-        case PROJECT -> "项目经历";
-        case ADVANTAGE -> "个人优势";
-      };
+      return sectionSubtitle(type);
     }
     return trimTo(title, 160);
   }
@@ -297,9 +294,9 @@ public class ResumeAdminService {
     return List.of(sectionSubtitle(type));
   }
 
-  private String find(Pattern pattern, String value, String fallback) {
+  private String find(Pattern pattern, String value, String defaultValue) {
     Matcher matcher = pattern.matcher(value);
-    return matcher.find() ? matcher.group() : fallback;
+    return matcher.find() ? matcher.group() : defaultValue;
   }
 
   private String trimTo(String value, int maxLength) {

@@ -6,6 +6,8 @@ public record ResumeOptimizeResponse(
     String provider,
     String role,
     String summary,
+    String rewrittenSummary,
     List<String> highlights,
+    List<String> sectionSuggestions,
     List<String> riskNotes) {
 }

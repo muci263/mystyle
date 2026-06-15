@@ -46,30 +46,16 @@ public class JdAnalysisService {
     String role = inferRole(jdText, keywords);
     long analysisId = idGenerator.getAndIncrement();
 
-    JdAnalysisResponse response = new JdAnalysisResponse(
-        analysisId,
-        llmService.providerName(),
-        role,
-        List.copyOf(keywords),
-        matchScore,
-        "基于当前经历资产，建议优先展示与岗位关键词直接匹配的项目、模块 Demo 和量化结果。",
-        orderedProjects.stream()
-            .map(project -> new ProjectRecommendation(
-                project.slug(),
-                project.name(),
-                buildProjectEmphasis(project, keywords),
-                project.metrics()))
-            .toList(),
-        orderedModules.stream()
-            .map(module -> new ModuleRecommendation(
-                module.slug(),
-                module.title(),
-                buildModuleReason(module, keywords)))
-            .toList(),
-        List.of(
-            llmService.configured() ? "已启用 Minimax Provider，生成内容仍需基于真实经历核验。" : "当前为规则型 mock Provider，未调用真实 LLM。",
-            "生成内容只基于已有经历资产，不能新增未验证经历。",
-            "后续接入真实 LLM 后需要保留来源支撑和人工确认。"));
+    JdAnalysisResponse response = Boolean.TRUE.equals(request.allowFallback())
+        ? fallbackAnalysis(analysisId, role, keywords, matchScore, orderedProjects, orderedModules)
+        : llmService.analyzeJd(
+            analysisId,
+            jdText,
+            role,
+            keywords,
+            matchScore,
+            orderedProjects,
+            orderedModules);
     analyses.put(analysisId, response);
     return response;
   }
@@ -86,7 +72,7 @@ public class JdAnalysisService {
         "我是赵豪然，主攻 Java 后端开发，重点展示 " + String.join("、", analysis.keywords()) + " 相关经历。",
         analysis.projectRecommendations().stream().map(ProjectRecommendation::slug).toList(),
         analysis.moduleRecommendations().stream().map(ModuleRecommendation::slug).toList(),
-        "MOCK_CREATED");
+        "CREATED");
   }
 
   private Set<String> extractKeywords(String jdText) {
@@ -139,6 +125,44 @@ public class JdAnalysisService {
       return "Java 后端开发实习生";
     }
     return "Java 后端开发";
+  }
+
+  private JdAnalysisResponse fallbackAnalysis(
+      long analysisId,
+      String role,
+      Set<String> keywords,
+      int matchScore,
+      List<Project> orderedProjects,
+      List<ModuleDemo> orderedModules) {
+    return new JdAnalysisResponse(
+        analysisId,
+        "explicit-rule-fallback",
+        role,
+        List.copyOf(keywords),
+        matchScore,
+        "用户已确认使用规则降级，基于当前经历资产生成岗位适配结果，未调用 Minimax。",
+        orderedProjects.stream()
+            .map(project -> new ProjectRecommendation(
+                project.slug(),
+                project.name(),
+                buildProjectEmphasis(project, keywords),
+                project.metrics()))
+            .toList(),
+        orderedModules.stream()
+            .map(module -> new ModuleRecommendation(
+                module.slug(),
+                module.title(),
+                buildModuleReason(module, keywords)))
+            .toList(),
+        List.of(
+            "简历开头摘要应贴合 " + role + "，优先呈现岗位关键词。",
+            "项目经历按推荐顺序重排，每个项目补充问题、方案、结果。",
+            "技术能力板块把 JD 高频技术栈前置，并保留真实掌握边界。"),
+        List.of(
+            "先用 30 秒说明岗位匹配定位，再展开最匹配项目。",
+            "每个推荐 Demo 准备一个故障、优化或取舍点。",
+            "避免空泛说 AI，重点讲清模型接入和工程约束。"),
+        List.of("这是用户显式触发的规则降级结果，不是模型输出。"));
   }
 
   private String buildProjectEmphasis(Project project, Set<String> keywords) {

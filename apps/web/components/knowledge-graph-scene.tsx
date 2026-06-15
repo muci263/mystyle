@@ -3,9 +3,9 @@
 import { Line, OrbitControls, Stars, Text } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useReducedMotion } from "framer-motion";
-import { useMemo, useRef, useState } from "react";
-import type { RefObject, WheelEvent } from "react";
-import type { Group } from "three";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
+import type { Camera, Group } from "three";
 import type { KnowledgeGraphNode, KnowledgeGraphView } from "@/lib/api";
 
 type NodeVisualType = "core" | "section" | "skill" | "project" | "module" | "blog";
@@ -31,7 +31,8 @@ const typeColors: Record<NodeVisualType, string> = {
 
 const GRAPH_MIN_DISTANCE = 6.4;
 const GRAPH_MAX_DISTANCE = 13.8;
-const SCROLL_RELEASE_EPSILON = 0.1;
+const SCROLL_RELEASE_EPSILON = 0.04;
+const WHEEL_ZOOM_DISTANCE_FACTOR = 0.006;
 
 export function KnowledgeGraphScene({
   graph,
@@ -46,13 +47,16 @@ export function KnowledgeGraphScene({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState("me");
   const cameraDistanceRef = useRef(GRAPH_MAX_DISTANCE);
+  const cameraRef = useRef<Camera | null>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const reduceMotion = Boolean(useReducedMotion());
   const nodeById = useMemo(() => new Map(sceneGraph.nodes.map((node) => [node.id, node])), [sceneGraph.nodes]);
   const activeNode = nodeById.get(activeId) ?? nodeById.get("me") ?? sceneGraph.nodes[0];
   const hoveredNode = hoveredId ? nodeById.get(hoveredId) : null;
+  const focusId = hoveredNode?.id ?? activeNode?.id ?? "me";
   const relatedIds = useMemo(
-      () => relatedNodeIds(sceneGraph.edges, hoveredNode?.id ?? activeNode?.id ?? "me"),
-      [sceneGraph.edges, hoveredNode?.id, activeNode?.id],
+      () => relatedNodeIds(sceneGraph.edges, focusId),
+      [sceneGraph.edges, focusId],
   );
   function notifyFocus(nodeId: string) {
     const node = nodeById.get(nodeId);
@@ -64,8 +68,20 @@ export function KnowledgeGraphScene({
     });
   }
 
-  function releasePageScrollAtZoomLimit(event: WheelEvent<HTMLDivElement>) {
-    if (event.deltaY <= 0 || cameraDistanceRef.current < GRAPH_MAX_DISTANCE - SCROLL_RELEASE_EPSILON) {
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const wheelTarget = shell.closest<HTMLElement>(".hero-stage") ?? shell;
+
+    wheelTarget.addEventListener("wheel", handleGraphWheel, { capture: true, passive: false });
+    return () => {
+      wheelTarget.removeEventListener("wheel", handleGraphWheel, { capture: true });
+    };
+  }, []);
+
+  function handleGraphWheel(event: WheelEvent) {
+    const camera = cameraRef.current;
+    if (!camera) {
       return;
     }
 
@@ -73,13 +89,42 @@ export function KnowledgeGraphScene({
       event.preventDefault();
     }
     event.stopPropagation();
-    window.scrollBy({ top: event.deltaY, behavior: "auto" });
+
+    const currentDistance = camera.position.length();
+    const wheelDelta = normalizedWheelDelta(event);
+    if (wheelDelta < 0) {
+      setCameraDistance(camera, Math.max(GRAPH_MIN_DISTANCE, currentDistance + wheelDelta * WHEEL_ZOOM_DISTANCE_FACTOR));
+      return;
+    }
+
+    if (currentDistance >= GRAPH_MAX_DISTANCE - SCROLL_RELEASE_EPSILON) {
+      scrollPage(wheelDelta);
+      return;
+    }
+
+    const requestedZoomOut = wheelDelta * WHEEL_ZOOM_DISTANCE_FACTOR;
+    const availableZoomOut = GRAPH_MAX_DISTANCE - currentDistance;
+    const appliedZoomOut = Math.min(availableZoomOut, requestedZoomOut);
+    setCameraDistance(camera, currentDistance + appliedZoomOut);
+
+    const unusedWheelDelta = (requestedZoomOut - appliedZoomOut) / WHEEL_ZOOM_DISTANCE_FACTOR;
+    if (unusedWheelDelta > 0) {
+      scrollPage(unusedWheelDelta);
+    }
+  }
+
+function scrollPage(deltaY: number) {
+    const scroller = document.scrollingElement ?? document.documentElement;
+    scroller.scrollTo({
+      top: scroller.scrollTop + deltaY,
+      behavior: "auto",
+    });
   }
 
   return (
-    <div className="knowledge-graph-shell" onWheelCapture={releasePageScrollAtZoomLimit}>
+    <div ref={shellRef} className="knowledge-graph-shell">
       <Canvas camera={{ position: [0, 0.15, 10.6], fov: 42 }} dpr={[1, 1.55]}>
-        <CameraDistanceProbe distanceRef={cameraDistanceRef} />
+        <CameraDistanceProbe cameraRef={cameraRef} distanceRef={cameraDistanceRef} />
         <ambientLight intensity={0.58} />
         <pointLight position={[2.8, 4.2, 5]} intensity={3.1} color="#dbe7ff" />
         <pointLight position={[-4, -2, 3]} intensity={2.2} color="#2563eb" />
@@ -87,7 +132,8 @@ export function KnowledgeGraphScene({
         <KnowledgeGraphMesh
           graph={sceneGraph}
           activeId={activeNode?.id ?? "me"}
-          hoveredId={hoveredId}
+          focusId={focusId}
+          revealEdges={Boolean(hoveredId)}
           relatedIds={relatedIds}
           reduceMotion={reduceMotion}
           onHover={setHoveredId}
@@ -99,13 +145,13 @@ export function KnowledgeGraphScene({
           onBlur={() => onNodeBlur?.()}
         />
         <OrbitControls
-          enableZoom
           enablePan={false}
           enableDamping
           dampingFactor={0.12}
           minDistance={GRAPH_MIN_DISTANCE}
           maxDistance={GRAPH_MAX_DISTANCE}
           zoomSpeed={0.28}
+          enableZoom={false}
           autoRotate={!reduceMotion && hoveredId === null}
           autoRotateSpeed={0.16}
           rotateSpeed={0.38}
@@ -115,20 +161,44 @@ export function KnowledgeGraphScene({
   );
 }
 
-function CameraDistanceProbe({ distanceRef }: { distanceRef: RefObject<number> }) {
+function normalizedWheelDelta(event: WheelEvent) {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    return event.deltaY * 16;
+  }
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    return event.deltaY * window.innerHeight;
+  }
+  return event.deltaY;
+}
+
+function CameraDistanceProbe({
+  cameraRef,
+  distanceRef,
+}: {
+  cameraRef: RefObject<Camera | null>;
+  distanceRef: RefObject<number>;
+}) {
   const { camera } = useThree();
 
   useFrame(() => {
+    cameraRef.current = camera;
     distanceRef.current = camera.position.length();
   });
 
   return null;
 }
 
+function setCameraDistance(camera: Camera, distance: number) {
+  const nextDistance = clamp(distance, GRAPH_MIN_DISTANCE, GRAPH_MAX_DISTANCE);
+  camera.position.setLength(nextDistance);
+  camera.updateMatrixWorld();
+}
+
 function KnowledgeGraphMesh({
   graph,
   activeId,
-  hoveredId,
+  focusId,
+  revealEdges,
   relatedIds,
   reduceMotion,
   onHover,
@@ -138,7 +208,8 @@ function KnowledgeGraphMesh({
 }: {
   graph: { nodes: SceneNode[]; edges: KnowledgeGraphView["edges"] };
   activeId: string;
-  hoveredId: string | null;
+  focusId: string;
+  revealEdges: boolean;
   relatedIds: Set<string>;
   reduceMotion: boolean;
   onHover: (id: string | null) => void;
@@ -150,7 +221,7 @@ function KnowledgeGraphMesh({
   const nodeById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
 
   useFrame((_, delta) => {
-    if (!groupRef.current || reduceMotion || hoveredId) {
+    if (!groupRef.current || reduceMotion || revealEdges) {
       return;
     }
     groupRef.current.rotation.y += delta * 0.038;
@@ -163,7 +234,9 @@ function KnowledgeGraphMesh({
         const from = nodeById.get(edge.fromNodeKey);
         const to = nodeById.get(edge.toNodeKey);
         if (!from || !to) return null;
-        const highlighted = relatedIds.has(edge.fromNodeKey) && relatedIds.has(edge.toNodeKey);
+        const highlighted =
+          revealEdges && (edge.fromNodeKey === focusId || edge.toNodeKey === focusId);
+        if (!edge.visible && !highlighted) return null;
         return (
           <Line
             key={edge.id || `${edge.fromNodeKey}-${edge.toNodeKey}-${edge.relationType}`}
@@ -171,7 +244,7 @@ function KnowledgeGraphMesh({
             color={highlighted ? "#9fc5ff" : "#263550"}
             lineWidth={highlighted ? 1.65 : 0.56}
             transparent
-            opacity={highlighted ? 0.86 : 0.28}
+            opacity={highlighted ? 0.9 : 0.24}
           />
         );
       })}

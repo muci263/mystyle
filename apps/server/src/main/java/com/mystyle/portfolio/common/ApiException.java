@@ -27,4 +27,12 @@ public class ApiException extends RuntimeException {
   public static ApiException badRequest(String message) {
     return new ApiException(HttpStatus.BAD_REQUEST, 40000, message);
   }
+
+  public static ApiException serviceUnavailable(String message) {
+    return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, 50310, message);
+  }
+
+  public static ApiException upstream(String message) {
+    return new ApiException(HttpStatus.BAD_GATEWAY, 50210, message);
+  }
 }

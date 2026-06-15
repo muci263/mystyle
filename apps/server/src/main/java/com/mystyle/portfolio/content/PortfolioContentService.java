@@ -20,6 +20,7 @@ import com.mystyle.portfolio.content.ContentModels.Project;
 import com.mystyle.portfolio.content.ContentModels.ResumeView;
 import com.mystyle.portfolio.content.ContentModels.TimelineItem;
 import com.mystyle.portfolio.knowledge.KnowledgeGraphEdgeRequest;
+import com.mystyle.portfolio.knowledge.KnowledgeGraphHierarchy;
 import com.mystyle.portfolio.knowledge.KnowledgeGraphNodeRequest;
 import java.util.List;
 import java.util.Locale;
@@ -40,7 +41,7 @@ public class PortfolioContentService {
         repository.projects(),
         repository.moduleDemos(),
         repository.interviewGuide(),
-        repository.knowledgeGraph());
+        knowledgeGraph());
   }
 
   public ResumeView resume() {
@@ -153,7 +154,12 @@ public class PortfolioContentService {
   }
 
   public KnowledgeGraphView knowledgeGraph() {
-    return repository.knowledgeGraph();
+    List<KnowledgeGraphNode> nodes = repository.knowledgeGraphNodes(false);
+    List<KnowledgeGraphEdge> edges = validKnowledgeGraphEdges(true).stream()
+        .filter(edge -> nodes.stream().anyMatch(node -> node.nodeKey().equals(edge.fromNodeKey())))
+        .filter(edge -> nodes.stream().anyMatch(node -> node.nodeKey().equals(edge.toNodeKey())))
+        .toList();
+    return new KnowledgeGraphView(nodes, edges);
   }
 
   public List<KnowledgeGraphNode> knowledgeGraphNodes(boolean includeHidden) {
@@ -161,10 +167,12 @@ public class PortfolioContentService {
   }
 
   public KnowledgeGraphNode createKnowledgeGraphNode(KnowledgeGraphNodeRequest request) {
+    KnowledgeGraphHierarchy.validateNodeLevel(request.nodeType(), request.level());
     return repository.createKnowledgeGraphNode(request);
   }
 
   public KnowledgeGraphNode updateKnowledgeGraphNode(String nodeKey, KnowledgeGraphNodeRequest request) {
+    KnowledgeGraphHierarchy.validateNodeLevel(request.nodeType(), request.level());
     return repository.updateKnowledgeGraphNode(nodeKey, request);
   }
 
@@ -173,14 +181,16 @@ public class PortfolioContentService {
   }
 
   public List<KnowledgeGraphEdge> knowledgeGraphEdges(boolean includeHidden) {
-    return repository.knowledgeGraphEdges(includeHidden);
+    return validKnowledgeGraphEdges(includeHidden);
   }
 
   public KnowledgeGraphEdge createKnowledgeGraphEdge(KnowledgeGraphEdgeRequest request) {
+    validateKnowledgeGraphEdge(request);
     return repository.createKnowledgeGraphEdge(request);
   }
 
   public KnowledgeGraphEdge updateKnowledgeGraphEdge(long edgeId, KnowledgeGraphEdgeRequest request) {
+    validateKnowledgeGraphEdge(request);
     return repository.updateKnowledgeGraphEdge(edgeId, request);
   }
 
@@ -192,5 +202,36 @@ public class PortfolioContentService {
     return values.stream()
         .map(value -> value.toLowerCase(Locale.ROOT))
         .anyMatch(value -> value.contains(keyword));
+  }
+
+  private void validateKnowledgeGraphEdge(KnowledgeGraphEdgeRequest request) {
+    KnowledgeGraphNode from = repository.knowledgeGraphNodes(true).stream()
+        .filter(node -> node.nodeKey().equals(request.fromNodeKey()))
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("图谱起点节点不存在"));
+    KnowledgeGraphNode to = repository.knowledgeGraphNodes(true).stream()
+        .filter(node -> node.nodeKey().equals(request.toNodeKey()))
+        .findFirst()
+        .orElseThrow(() -> ApiException.notFound("图谱终点节点不存在"));
+    KnowledgeGraphHierarchy.validateEdge(from, to, request.relationType());
+  }
+
+  private List<KnowledgeGraphEdge> validKnowledgeGraphEdges(boolean includeHidden) {
+    List<KnowledgeGraphNode> nodes = repository.knowledgeGraphNodes(true);
+    return repository.knowledgeGraphEdges(includeHidden).stream()
+        .filter(edge -> validKnowledgeGraphEdge(edge, nodes))
+        .toList();
+  }
+
+  private boolean validKnowledgeGraphEdge(KnowledgeGraphEdge edge, List<KnowledgeGraphNode> nodes) {
+    KnowledgeGraphNode from = nodes.stream()
+        .filter(node -> node.nodeKey().equals(edge.fromNodeKey()))
+        .findFirst()
+        .orElse(null);
+    KnowledgeGraphNode to = nodes.stream()
+        .filter(node -> node.nodeKey().equals(edge.toNodeKey()))
+        .findFirst()
+        .orElse(null);
+    return from != null && to != null && KnowledgeGraphHierarchy.edgeAllowed(from, to, edge.relationType());
   }
 }

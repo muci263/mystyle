@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, Plus, RefreshCw, Rocket, Save, Trash2, UploadCloud } from "lucide-react";
+import { LlmProgressPanel, useLlmProgress } from "@/components/llm-progress";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import type {
   ResumeBasicInfo,
@@ -50,6 +51,7 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const llmProgress = useLlmProgress();
 
   const activeItems = draft.sections[activeSection] ?? [];
   const activeMeta = sections.find((section) => section.type === activeSection) ?? sections[0];
@@ -116,15 +118,32 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
 
   async function parseUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await runParseUpload(false);
+  }
+
+  async function runParseUpload(allowFallback: boolean) {
     await run("parse", async () => {
+      llmProgress.start(allowFallback ? "规则兜底简历解析" : "AI 简历扫描", [
+        { id: "contract", label: "解析契约", detail: "约定 basicInfo 与 SKILL/AWARD/INTERNSHIP/PROJECT/ADVANTAGE 输出结构。" },
+        { id: "request", label: "模型扫描", detail: "Minimax 正在抽取真实简历信息，不补造经历。" },
+        { id: "guard", label: "结构校验", detail: "后端校验字段、分组、可见性和排序。" },
+        { id: "preview", label: "生成预览", detail: "创建解析任务，等待人工确认写入草稿。" },
+      ]);
+      llmProgress.setStep("contract", "done", "输入为原始简历文本，输出为受控 JSON 草稿。");
+      llmProgress.activate("request", allowFallback ? "用户已确认使用规则降级，本次不调用 Minimax。" : "正在调用简历结构化解析。");
       const task = await apiPost<ResumeUploadTask>("/admin/resume/uploads/parse", {
         filename: "resume-text.txt",
         contentType: "text/plain",
         content: uploadText,
+        allowFallback,
       });
+      llmProgress.activate("guard", "正在检查解析结果是否可写入草稿。");
+      llmProgress.setStep("guard", "done", task.errorMessage ?? "解析结果已通过结构化校验。");
+      llmProgress.activate("preview", "正在生成可确认的解析任务。");
       setUploadTask(task);
       setNotice(task.errorMessage ?? "解析完成，请确认后写入草稿");
-    });
+      llmProgress.complete(task.errorMessage ?? "完成：解析任务已生成，请确认后写入草稿。");
+    }, llmProgress.fail);
   }
 
   async function confirmUpload() {
@@ -158,14 +177,16 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
     setItemForm({ ...emptyItem, sortOrder: activeItems.length + 1 });
   }
 
-  async function run(action: string, task: () => Promise<void>) {
+  async function run(action: string, task: () => Promise<void>, onError?: (message: string) => void) {
     setBusy(action);
     setError("");
     setNotice("");
     try {
       await task();
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "操作失败");
+      const message = exception instanceof Error ? exception.message : "操作失败";
+      setError(message);
+      onError?.(message);
     } finally {
       setBusy("");
     }
@@ -191,6 +212,8 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
             {error || notice}
           </div>
         ) : null}
+
+        <LlmProgressPanel state={llmProgress.progress} onDismiss={llmProgress.reset} />
 
         <div className="mt-8 grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
           <form onSubmit={saveBasicInfo} className="admin-panel">
@@ -317,18 +340,28 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">Resume Upload</p>
                 <h2 className="mt-3 text-2xl font-semibold">简历上传解析</h2>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-graphite">第一阶段支持粘贴文本解析。解析结果只会生成任务，确认后才写入草稿。</p>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-graphite">支持粘贴文本扫描。默认必须真实调用 Minimax；未配置、调用失败或模型返回不合格时会直接报错。只有点击规则兜底解析时，才使用本地规则生成可确认任务。</p>
               </div>
-              <button disabled={busy === "parse" || !uploadText.trim()} className="primary-action px-5 py-3 text-sm font-medium disabled:opacity-55">
-                {busy === "parse" ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}
-                解析文本
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => runParseUpload(true)}
+                  disabled={busy === "parse" || !uploadText.trim()}
+                  className="secondary-action px-5 py-3 text-sm font-medium disabled:opacity-55"
+                >
+                  规则兜底解析
+                </button>
+                <button disabled={busy === "parse" || !uploadText.trim()} className="primary-action px-5 py-3 text-sm font-medium disabled:opacity-55">
+                  {busy === "parse" ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}
+                  AI 扫描简历
+                </button>
+              </div>
             </div>
             <textarea
               value={uploadText}
               onChange={(event) => setUploadText(event.target.value)}
               className="mt-6 min-h-56 w-full resize-y border border-line bg-white px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-accent"
-              placeholder="粘贴简历原文，包含：技术能力、获奖经历、实习经历、项目经历、个人优势等板块..."
+              placeholder="粘贴简历原文，Minimax 会尝试自动拆分个人信息、技术能力、获奖经历、实习经历、项目经历、个人优势..."
             />
             {uploadTask ? (
               <div className="mt-5 border border-line bg-stonepaper p-4">

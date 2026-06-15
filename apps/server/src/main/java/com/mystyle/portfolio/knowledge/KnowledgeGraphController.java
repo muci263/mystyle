@@ -45,13 +45,22 @@ public class KnowledgeGraphController {
 
   @PostMapping("/admin/knowledge-graph/nodes/smart-create")
   public ApiResponse<KnowledgeGraphAutoRelateResponse> smartCreateNode(
-      @Valid @RequestBody KnowledgeGraphSmartNodeRequest request) {
-    return ApiResponse.success(smartService.smartCreate(request));
+      @Valid @RequestBody KnowledgeGraphSmartNodeRequest request,
+      @RequestParam(value = "allowFallback", defaultValue = "false") boolean allowFallback) {
+    return ApiResponse.success(smartService.smartCreate(request, allowFallback));
   }
 
   @PostMapping("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate")
-  public ApiResponse<KnowledgeGraphAutoRelateResponse> autoRelateNode(@PathVariable("nodeKey") String nodeKey) {
-    return ApiResponse.success(smartService.autoRelate(nodeKey));
+  public ApiResponse<KnowledgeGraphAutoRelateResponse> autoRelateNode(
+      @PathVariable("nodeKey") String nodeKey,
+      @RequestParam(value = "allowFallback", defaultValue = "false") boolean allowFallback) {
+    return ApiResponse.success(smartService.autoRelate(nodeKey, allowFallback));
+  }
+
+  @PostMapping("/admin/knowledge-graph/orchestrate")
+  public ApiResponse<KnowledgeGraphOrchestrateResponse> orchestrateGraph(
+      @RequestParam(value = "allowFallback", defaultValue = "false") boolean allowFallback) {
+    return ApiResponse.success(smartService.orchestrate(allowFallback));
   }
 
   @PutMapping("/admin/knowledge-graph/nodes/{nodeKey}")

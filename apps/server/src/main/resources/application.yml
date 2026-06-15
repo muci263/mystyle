@@ -32,6 +32,6 @@ app:
   llm:
     minimax:
       api-key: ${MINIMAX_API_KEY:}
-      base-url: ${MINIMAX_BASE_URL:https://api.minimax.io/v1}
-      text-model: ${MINIMAX_TEXT_MODEL:MiniMax-M1}
+      base-url: ${MINIMAX_BASE_URL:https://api.minimaxi.com/v1}
+      text-model: ${MINIMAX_TEXT_MODEL:MiniMax-M2.7}
       vision-model: ${MINIMAX_VISION_MODEL:MiniMax-Text-01}

@@ -201,7 +201,7 @@ public class JdbcResumeAdminRepository implements ResumeAdminRepository {
   @Transactional
   public ResumeDraftView confirmUploadTask(long taskId) {
     ResumeUploadTask task = uploadTask(taskId);
-    if (!"PARSED".equals(task.status()) && !"FALLBACK_REQUIRED".equals(task.status())) {
+    if (!"PARSED".equals(task.status())) {
       throw ApiException.badRequest("当前解析任务不可确认写入");
     }
     if (task.parsedJson() == null || task.parsedJson().isBlank()) {
@@ -388,7 +388,7 @@ public class JdbcResumeAdminRepository implements ResumeAdminRepository {
         """
         INSERT INTO resume_basic_info
           (version_id, name, title, summary, email, phone, location, education, github_url, website_url)
-        VALUES (?, '未填写', '未填写', '待补充个人介绍', 'placeholder@example.com', '', '', '待补充教育经历', '', '')
+        VALUES (?, '未填写', '未填写', '待补充个人介绍', '', '', '', '待补充教育经历', '', '')
         """,
         draftId);
     return draftId;

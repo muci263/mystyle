@@ -1,6 +1,7 @@
 package com.mystyle.portfolio.moduleDemo;
 
 import com.mystyle.portfolio.common.ApiException;
+import com.mystyle.portfolio.llm.LlmService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -10,6 +11,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class AgentWorkflowService {
   private final Map<String, AgentWorkflowRun> runs = new ConcurrentHashMap<>();
+  private final LlmService llmService;
+
+  public AgentWorkflowService(LlmService llmService) {
+    this.llmService = llmService;
+  }
 
   public List<Map<String, Object>> templates() {
     return List.of(
@@ -28,7 +34,7 @@ public class AgentWorkflowService {
         ? "rag-question"
         : request.templateId();
     List<AgentWorkflowStep> steps = buildSteps(templateId);
-    String answer = "已根据模板 " + templateId + " 模拟完成工具路由、检索/查询和结果校验。";
+    String answer = llmService.runAgentWorkflow(request.question(), templateId);
     AgentWorkflowRun run = new AgentWorkflowRun(UUID.randomUUID().toString(), "COMPLETED", request.question(), answer, steps);
     runs.put(run.runId(), run);
     return run;
@@ -48,13 +54,13 @@ public class AgentWorkflowService {
           new AgentWorkflowStep("intent", "DONE", "识别为数据库问答任务"),
           new AgentWorkflowStep("metadata", "DONE", "读取表结构与字段说明"),
           new AgentWorkflowStep("sql_safety", "DONE", "仅允许 SELECT 演示查询"),
-          new AgentWorkflowStep("execute", "DONE", "返回模拟查询结果"),
-          new AgentWorkflowStep("explain", "DONE", "生成结果解释"));
+          new AgentWorkflowStep("execute", "SKIPPED", "未接入真实数据库执行器，不生成伪造查询结果"),
+          new AgentWorkflowStep("explain", "DONE", "Minimax 基于问题和工具边界生成解释"));
     }
     return List.of(
         new AgentWorkflowStep("intent", "DONE", "识别用户问题意图"),
-        new AgentWorkflowStep("retrieval", "DONE", "Top-K 召回模拟知识片段"),
-        new AgentWorkflowStep("llm", "DONE", "调用 mock LLM 生成回答"),
+        new AgentWorkflowStep("retrieval", "SKIPPED", "未接入真实 RAG 检索器，不生成伪造召回片段"),
+        new AgentWorkflowStep("llm", "DONE", "调用 Minimax 生成回答"),
         new AgentWorkflowStep("verify", "DONE", "检查回答是否有来源支撑"));
   }
 }

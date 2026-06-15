@@ -7,5 +7,6 @@ import java.util.List;
 public record JdAnalyzeRequest(
     @NotBlank @Size(max = 8000) String jd,
     List<String> target,
-    String variantName) {
+    String variantName,
+    Boolean allowFallback) {
 }

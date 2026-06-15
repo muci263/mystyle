@@ -11,6 +11,8 @@ public record JdAnalysisResponse(
     String summary,
     List<ProjectRecommendation> projectRecommendations,
     List<ModuleRecommendation> moduleRecommendations,
+    List<String> resumeOptimizations,
+    List<String> interviewTalkingPoints,
     List<String> riskNotes) {
 
   public record ProjectRecommendation(

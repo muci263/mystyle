@@ -69,17 +69,17 @@ class PortfolioApiSmokeTest {
     JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
     ObjectMapper objectMapper = new ObjectMapper();
     PortfolioContentService contentService = new PortfolioContentService(new JdbcPortfolioContentRepository(jdbcTemplate));
-    ResumeAdminService resumeAdminService = new ResumeAdminService(new JdbcResumeAdminRepository(jdbcTemplate, objectMapper), objectMapper);
-    LlmService llmService = new LlmService(objectMapper, "", "https://api.minimax.io/v1", "MiniMax-M1", "MiniMax-Text-01");
+    LlmService llmService = new LlmService(objectMapper, "", "https://api.minimaxi.com/v1", "MiniMax-M2.7", "MiniMax-Text-01");
+    ResumeAdminService resumeAdminService = new ResumeAdminService(new JdbcResumeAdminRepository(jdbcTemplate, objectMapper), objectMapper, llmService);
     KnowledgeGraphSmartService knowledgeGraphSmartService = new KnowledgeGraphSmartService(contentService, llmService);
     JdAnalysisService jdAnalysisService = new JdAnalysisService(contentService, llmService);
     VideoLearningService videoLearningService = new VideoLearningService();
-    AgentWorkflowService agentWorkflowService = new AgentWorkflowService();
+    AgentWorkflowService agentWorkflowService = new AgentWorkflowService(llmService);
     AnalyticsService analyticsService = new AnalyticsService();
     CorsConfig corsConfig = new CorsConfig("http://localhost:3000,http://127.0.0.1:3000");
 
     mockMvc = MockMvcBuilders.standaloneSetup(
-            new HealthController(new HealthService(jdbcTemplate)),
+            new HealthController(new HealthService(jdbcTemplate, llmService)),
             new ProfileController(contentService),
             new ResumeController(contentService),
             new ProjectController(contentService),
@@ -133,7 +133,8 @@ class PortfolioApiSmokeTest {
         .andExpect(jsonPath("$.data.nodes[*].nodeKey", hasItem("section-blog")))
         .andExpect(jsonPath("$.data.nodes[*].nodeKey", hasItem("blog-redis-video-progress-buffer")))
         .andExpect(jsonPath("$.data.edges[*].toNodeKey", hasItem("blog-redis-video-progress-buffer")))
-        .andExpect(jsonPath("$.data.edges[*].relationType", hasItem("CONTAINS")));
+        .andExpect(jsonPath("$.data.edges[*].relationType", hasItem("CONTAINS")))
+        .andExpect(jsonPath("$.data.edges[*].visible", hasItem(false)));
 
     mockMvc.perform(post("/admin/knowledge-graph/nodes")
             .contentType(MediaType.APPLICATION_JSON)
@@ -159,6 +160,30 @@ class PortfolioApiSmokeTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.nodeKey").value("blog-test-note"));
 
+    mockMvc.perform(post("/admin/knowledge-graph/nodes")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "nodeKey": "blog-wrong-level",
+                  "label": "错误层级博客",
+                  "nodeType": "BLOG",
+                  "level": 0,
+                  "summary": "BLOG 必须是三级内容节点",
+                  "content": "用于校验层级规则。",
+                  "tags": ["Blog"],
+                  "href": "/blog/wrong-level",
+                  "sourceType": "BLOG",
+                  "sourceSlug": "wrong-level",
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "visible": true,
+                  "sortOrder": 1001
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("节点层级不匹配：BLOG 必须为 三级"));
+
     mockMvc.perform(put("/admin/knowledge-graph/nodes/blog-test-note")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
@@ -183,6 +208,20 @@ class PortfolioApiSmokeTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.label").value("测试博客节点更新"))
         .andExpect(jsonPath("$.data.content").value("更新后的悬停展示内容。"));
+
+    mockMvc.perform(post("/admin/knowledge-graph/edges")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "fromNodeKey": "module-agent-workflow",
+                  "toNodeKey": "me",
+                  "relationType": "RELATED",
+                  "visible": false,
+                  "sortOrder": 1000
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("不能跨级连接：三级 节点不能直接连接 一级 节点"));
 
     String edgeResponse = mockMvc.perform(post("/admin/knowledge-graph/edges")
             .contentType(MediaType.APPLICATION_JSON)
@@ -212,11 +251,12 @@ class PortfolioApiSmokeTest {
   }
 
   @Test
-  void knowledgeGraphSmartCreateShouldUseFallbackProviderAndAutoRelate() throws Exception {
+  void aiKnowledgeGraphEndpointsShouldFailWithoutRealProvider() throws Exception {
     mockMvc.perform(get("/llm/status"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.provider").value("mock-rule-provider"))
-        .andExpect(jsonPath("$.data.configured").value(false));
+        .andExpect(jsonPath("$.data.provider").value("minimax-chat-completions"))
+        .andExpect(jsonPath("$.data.configured").value(false))
+        .andExpect(jsonPath("$.data.mode").value("missing-api-key"));
 
     mockMvc.perform(post("/admin/knowledge-graph/nodes/smart-create")
             .contentType(MediaType.APPLICATION_JSON)
@@ -229,15 +269,17 @@ class PortfolioApiSmokeTest {
                   "visible": true
                 }
                 """))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.provider").value("mock-rule-provider"))
-        .andExpect(jsonPath("$.data.node.nodeType").value("BLOG"))
-        .andExpect(jsonPath("$.data.createdEdges[0].relationType").exists());
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value(50310));
 
     mockMvc.perform(post("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate", "blog-redis-video-progress-buffer"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value(50310));
+
+    mockMvc.perform(post("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate", "blog-redis-video-progress-buffer")
+            .param("allowFallback", "true"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.provider").value("mock-rule-provider"))
-        .andExpect(jsonPath("$.data.node.nodeKey").value("blog-redis-video-progress-buffer"));
+        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"));
   }
 
   @Test
@@ -381,7 +423,7 @@ class PortfolioApiSmokeTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data[0].title").value("校级奖学金"));
 
-    String uploadResponse = mockMvc.perform(post("/admin/resume/uploads/parse")
+    mockMvc.perform(post("/admin/resume/uploads/parse")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
@@ -390,16 +432,30 @@ class PortfolioApiSmokeTest {
                   "content": "赵豪然\\nitmucizhr@163.com\\n技术能力\\nJava Spring Boot Redis MySQL\\n项目经历\\n矿山教育系统\\n视频进度上报与 Redis 缓存同步\\n个人优势\\n工程化意识强"
                 }
                 """))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value(50310));
+
+    String taskResponse = mockMvc.perform(post("/admin/resume/uploads/parse")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "filename": "resume.txt",
+                  "contentType": "text/plain",
+                  "content": "赵豪然\\nitmucizhr@163.com\\n山西大学 软件工程 本科\\n技术能力\\nJava Spring Boot Redis MySQL\\n项目经历\\n矿山教育系统\\n视频进度上报与 Redis 缓存同步\\n个人优势\\n工程化意识强",
+                  "allowFallback": true
+                }
+                """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.status").value("PARSED"))
+        .andExpect(jsonPath("$.data.errorMessage").value("已按用户确认使用规则解析，请确认后写入草稿"))
         .andReturn()
         .getResponse()
         .getContentAsString();
 
-    long taskId = uploadResponse.contains("\"id\":1") ? 1 : 0;
+    long taskId = taskResponse.contains("\"id\":") ? Long.parseLong(taskResponse.replaceAll(".*\\\"id\\\":(\\d+).*", "$1")) : 0;
     mockMvc.perform(post("/admin/resume/uploads/{taskId}/confirm", taskId))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.sections.PROJECT[0].title").value("矿山教育系统"));
+        .andExpect(jsonPath("$.data.basicInfo.name").value("赵豪然"));
 
     mockMvc.perform(post("/admin/resume/publish"))
         .andExpect(status().isOk())
@@ -417,8 +473,34 @@ class PortfolioApiSmokeTest {
   }
 
   @Test
-  void jdAnalyzeShouldCreateRecommendationsAndVariant() throws Exception {
-    String response = mockMvc.perform(post("/jd/analyze")
+  void jdAnalyzeShouldFailWithoutRealProvider() throws Exception {
+    mockMvc.perform(post("/llm/resume/optimize")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "resumeText": "赵豪然，Java 后端开发，做过 Redis 与 Spring Boot 项目。",
+                  "jdText": "Java 后端实习，要求 Spring Boot、Redis、MySQL",
+                  "targetRole": "Java 后端开发实习生"
+                }
+                """))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value(50310));
+
+    mockMvc.perform(post("/llm/resume/optimize")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "resumeText": "赵豪然，Java 后端开发，做过 Redis 与 Spring Boot 项目。",
+                  "jdText": "Java 后端实习，要求 Spring Boot、Redis、MySQL",
+                  "targetRole": "Java 后端开发实习生",
+                  "allowFallback": true
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"))
+        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是用户显式触发的规则降级结果，不是模型输出。"));
+
+    mockMvc.perform(post("/jd/analyze")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
@@ -426,17 +508,21 @@ class PortfolioApiSmokeTest {
                   "variantName": "Java 后端实习岗位"
                 }
                 """))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.matchScore").value(96))
-        .andExpect(jsonPath("$.data.projectRecommendations[0].slug").value("mine-education-system"))
-        .andReturn()
-        .getResponse()
-        .getContentAsString();
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value(50310));
 
-    long analysisId = response.contains("\"analysisId\":1") ? 1 : 0;
-    mockMvc.perform(post("/jd/analyses/{analysisId}/variant", analysisId))
+    mockMvc.perform(post("/jd/analyze")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "jd": "Java 后端实习，要求 Spring Boot、Redis、MySQL、微服务，有 AI 或 RAG 经验加分",
+                  "variantName": "Java 后端实习岗位",
+                  "allowFallback": true
+                }
+                """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("MOCK_CREATED"));
+        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"))
+        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是用户显式触发的规则降级结果，不是模型输出。"));
   }
 
   @Test
@@ -467,7 +553,7 @@ class PortfolioApiSmokeTest {
   }
 
   @Test
-  void agentWorkflowAndAnalyticsShouldAcceptDemoRequests() throws Exception {
+  void agentWorkflowShouldFailWithoutRealProviderAndAnalyticsShouldAcceptDemoRequests() throws Exception {
     mockMvc.perform(get("/lab/agent-workflow/templates"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data[0].templateId").value("rag-question"));
@@ -480,9 +566,8 @@ class PortfolioApiSmokeTest {
                   "templateId": "sql-bot"
                 }
                 """))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-        .andExpect(jsonPath("$.data.steps[0].node").value("intent"));
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value(50310));
 
     mockMvc.perform(post("/analytics/events")
             .contentType(MediaType.APPLICATION_JSON)

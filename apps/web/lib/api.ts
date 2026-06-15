@@ -202,6 +202,14 @@ export type KnowledgeGraphAutoRelateResponse = {
   notes: string[];
 };
 
+export type KnowledgeGraphOrchestrateResponse = {
+  provider: string;
+  scannedNodes: number;
+  createdEdges: number;
+  results: KnowledgeGraphAutoRelateResponse[];
+  notes: string[];
+};
+
 export type LlmProviderStatus = {
   provider: string;
   configured: boolean;
@@ -305,6 +313,18 @@ export type JdAnalysisResponse = {
     title: string;
     reason: string;
   }>;
+  resumeOptimizations: string[];
+  interviewTalkingPoints: string[];
+  riskNotes: string[];
+};
+
+export type ResumeOptimizeResponse = {
+  provider: string;
+  role: string;
+  summary: string;
+  rewrittenSummary: string;
+  highlights: string[];
+  sectionSuggestions: string[];
   riskNotes: string[];
 };
 

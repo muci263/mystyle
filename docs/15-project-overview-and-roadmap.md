@@ -284,8 +284,8 @@ POST /api/llm/resume/optimize
 
 ```env
 MINIMAX_API_KEY=
-MINIMAX_BASE_URL=https://api.minimax.io/v1
-MINIMAX_TEXT_MODEL=MiniMax-M1
+MINIMAX_BASE_URL=https://api.minimaxi.com/v1
+MINIMAX_TEXT_MODEL=MiniMax-M2.7
 MINIMAX_VISION_MODEL=MiniMax-Text-01
 ```
 
@@ -692,8 +692,8 @@ http://localhost:3000/admin/knowledge-graph
 
 ```env
 MINIMAX_API_KEY=你的 Key
-MINIMAX_BASE_URL=https://api.minimax.io/v1
-MINIMAX_TEXT_MODEL=MiniMax-M1
+MINIMAX_BASE_URL=https://api.minimaxi.com/v1
+MINIMAX_TEXT_MODEL=MiniMax-M2.7
 MINIMAX_VISION_MODEL=MiniMax-Text-01
 ```
 

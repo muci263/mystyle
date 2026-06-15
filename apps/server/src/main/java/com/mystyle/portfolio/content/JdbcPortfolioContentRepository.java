@@ -298,7 +298,7 @@ public class JdbcPortfolioContentRepository implements PortfolioContentRepositor
   public KnowledgeGraphView knowledgeGraph() {
     List<KnowledgeGraphNode> nodes = knowledgeGraphNodes(false);
     List<String> visibleNodeKeys = nodes.stream().map(KnowledgeGraphNode::nodeKey).toList();
-    List<KnowledgeGraphEdge> edges = knowledgeGraphEdges(false).stream()
+    List<KnowledgeGraphEdge> edges = knowledgeGraphEdges(true).stream()
         .filter(edge -> visibleNodeKeys.contains(edge.fromNodeKey()) && visibleNodeKeys.contains(edge.toNodeKey()))
         .toList();
     return new KnowledgeGraphView(nodes, edges);

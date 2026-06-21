@@ -7,7 +7,7 @@ export default function JdAdapterPage() {
       <PageHeader
         eyebrow="JD Adapter"
         title="JD 智能适配器"
-        description="第一版先明确业务流程：输入岗位 JD，系统基于真实经历资产生成岗位匹配、项目排序、模块推荐和风险提示。真实 LLM 接入会在后续阶段实现。"
+        description="上传或粘贴简历后输入岗位 JD，系统会基于真实经历资产调用 LLM 生成岗位匹配、JD 适配版简历和模拟面试问答。"
       />
 
       <JdAdapterClient />

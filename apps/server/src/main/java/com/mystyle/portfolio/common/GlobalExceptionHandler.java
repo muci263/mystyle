@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -28,6 +29,12 @@ public class GlobalExceptionHandler {
         .map(error -> error.getField() + " " + error.getDefaultMessage())
         .orElse("参数错误");
     return ApiResponse.error(40001, message);
+  }
+
+  @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+  @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+  public ApiResponse<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException exception) {
+    return ApiResponse.error(40500, "请求方法不支持：" + exception.getMethod());
   }
 
   @ExceptionHandler(Exception.class)

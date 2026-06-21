@@ -26,4 +26,9 @@ public class LlmController {
   public ApiResponse<ResumeOptimizeResponse> optimizeResume(@Valid @RequestBody ResumeOptimizeRequest request) {
     return ApiResponse.success(llmService.optimizeResume(request));
   }
+
+  @PostMapping("/interview/mock")
+  public ApiResponse<MockInterviewResponse> mockInterview(@Valid @RequestBody MockInterviewRequest request) {
+    return ApiResponse.success(llmService.mockInterview(request));
+  }
 }

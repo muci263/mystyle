@@ -66,6 +66,13 @@ public final class ResumeModels {
       String updatedAt) {
   }
 
+  public record ResumeExtractedText(
+      String filename,
+      String contentType,
+      String rawText,
+      int charCount) {
+  }
+
   public record ResumeParsedPayload(
       ResumeBasicInfoRequest basicInfo,
       Map<ResumeSectionType, List<ResumeSectionItemRequest>> sections) {

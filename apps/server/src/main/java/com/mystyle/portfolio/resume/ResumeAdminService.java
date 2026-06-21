@@ -6,23 +6,35 @@ import com.mystyle.portfolio.common.ApiException;
 import com.mystyle.portfolio.llm.LlmService;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeBasicInfo;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeDraftView;
+import com.mystyle.portfolio.resume.ResumeModels.ResumeExtractedText;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeParsedPayload;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeSectionItem;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeUploadTask;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeVersion;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.Base64;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.hwpf.HWPFDocument;
+import org.apache.poi.hwpf.extractor.WordExtractor;
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ResumeAdminService {
   private static final Pattern EMAIL_PATTERN = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
   private static final Pattern PHONE_PATTERN = Pattern.compile("(?<!\\d)(1[3-9]\\d{9})(?!\\d)");
+  private static final int MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
   private final ResumeAdminRepository repository;
   private final ObjectMapper objectMapper;
@@ -98,12 +110,96 @@ public class ResumeAdminService {
         allowFallback ? "已按用户确认使用规则解析，请确认后写入草稿" : "Minimax 已完成真实结构化扫描，请确认后写入草稿");
   }
 
+  public ResumeExtractedText extractUploadText(ResumeFileExtractRequest request) {
+    byte[] bytes = decodeUpload(request.contentBase64());
+    if (bytes.length > MAX_UPLOAD_BYTES) {
+      throw ApiException.badRequest("简历文件不能超过 5MB。");
+    }
+    String filename = request.filename() == null ? "" : request.filename().trim();
+    String contentType = contentType(request.contentType());
+    String rawText = extractText(filename, contentType, bytes).trim();
+    if (rawText.isBlank()) {
+      throw ApiException.badRequest("没有从文件中提取到可用文本，请确认 PDF/Word 不是扫描图片或加密文件。");
+    }
+    return new ResumeExtractedText(filename, contentType, normalizeText(rawText), rawText.length());
+  }
+
   public ResumeDraftView confirmUploadTask(long taskId) {
     return repository.confirmUploadTask(taskId);
   }
 
   public ResumeUploadTask uploadTask(long taskId) {
     return repository.uploadTask(taskId);
+  }
+
+  private byte[] decodeUpload(String contentBase64) {
+    try {
+      return Base64.getDecoder().decode(contentBase64);
+    } catch (IllegalArgumentException exception) {
+      throw ApiException.badRequest("文件内容不是合法 Base64。");
+    }
+  }
+
+  private String extractText(String filename, String contentType, byte[] bytes) {
+    String extension = extensionOf(filename);
+    try {
+      if ("pdf".equals(extension) || contentType.contains("pdf")) {
+        return extractPdf(bytes);
+      }
+      if ("docx".equals(extension) || contentType.contains("wordprocessingml")) {
+        return extractDocx(bytes);
+      }
+      if ("doc".equals(extension) || contentType.equals("application/msword")) {
+        return extractDoc(bytes);
+      }
+      if (Set.of("txt", "md", "markdown").contains(extension) || contentType.startsWith("text/")) {
+        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+      }
+    } catch (ApiException exception) {
+      throw exception;
+    } catch (IOException | RuntimeException exception) {
+      throw ApiException.badRequest("简历文件解析失败：" + trimTo(exception.getMessage(), 160));
+    }
+    throw ApiException.badRequest("暂不支持该简历格式，请上传 PDF、DOC、DOCX、TXT 或 Markdown。");
+  }
+
+  private String extractPdf(byte[] bytes) throws IOException {
+    try (PDDocument document = PDDocument.load(bytes)) {
+      if (document.isEncrypted()) {
+        throw ApiException.badRequest("PDF 文件已加密，无法提取文本。");
+      }
+      return new PDFTextStripper().getText(document);
+    }
+  }
+
+  private String extractDocx(byte[] bytes) throws IOException {
+    try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(bytes));
+         XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
+      return extractor.getText();
+    }
+  }
+
+  private String extractDoc(byte[] bytes) throws IOException {
+    try (HWPFDocument document = new HWPFDocument(new ByteArrayInputStream(bytes));
+         WordExtractor extractor = new WordExtractor(document)) {
+      return extractor.getText();
+    }
+  }
+
+  private String extensionOf(String filename) {
+    int dot = filename == null ? -1 : filename.lastIndexOf('.');
+    return dot >= 0 && dot < filename.length() - 1
+        ? filename.substring(dot + 1).toLowerCase(java.util.Locale.ROOT)
+        : "";
+  }
+
+  private String normalizeText(String rawText) {
+    return rawText
+        .replace('\u00A0', ' ')
+        .replaceAll("[\\t\\x0B\\f\\r]+", " ")
+        .replaceAll(" *\\n *", "\n")
+        .replaceAll("\\n{3,}", "\n\n")
+        .trim();
   }
 
   private ResumeParsedPayload parseRawText(String rawText) {

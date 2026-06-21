@@ -173,6 +173,7 @@ public class PortfolioContentService {
 
   public KnowledgeGraphNode updateKnowledgeGraphNode(String nodeKey, KnowledgeGraphNodeRequest request) {
     KnowledgeGraphHierarchy.validateNodeLevel(request.nodeType(), request.level());
+    validateKnowledgeGraphNodeUpdate(nodeKey, request);
     return repository.updateKnowledgeGraphNode(nodeKey, request);
   }
 
@@ -214,6 +215,66 @@ public class PortfolioContentService {
         .findFirst()
         .orElseThrow(() -> ApiException.notFound("图谱终点节点不存在"));
     KnowledgeGraphHierarchy.validateEdge(from, to, request.relationType());
+  }
+
+  private void validateKnowledgeGraphNodeUpdate(String nodeKey, KnowledgeGraphNodeRequest request) {
+    String currentKey = normalizedNodeKey(nodeKey);
+    String nextKey = normalizedNodeKey(request.nodeKey());
+    KnowledgeGraphNode updatedNode = nodeFromRequest(request);
+    List<KnowledgeGraphNode> nodes = repository.knowledgeGraphNodes(true).stream()
+        .map(node -> node.nodeKey().equals(currentKey) ? updatedNode : node)
+        .toList();
+
+    for (KnowledgeGraphEdge edge : repository.knowledgeGraphEdges(true)) {
+      boolean touchesUpdatedNode = edge.fromNodeKey().equals(currentKey)
+          || edge.toNodeKey().equals(currentKey)
+          || edge.fromNodeKey().equals(nextKey)
+          || edge.toNodeKey().equals(nextKey);
+      if (!touchesUpdatedNode) {
+        continue;
+      }
+      String fromKey = edge.fromNodeKey().equals(currentKey) ? nextKey : edge.fromNodeKey();
+      String toKey = edge.toNodeKey().equals(currentKey) ? nextKey : edge.toNodeKey();
+      KnowledgeGraphNode from = findNode(nodes, fromKey);
+      KnowledgeGraphNode to = findNode(nodes, toKey);
+      if (from == null || to == null) {
+        continue;
+      }
+      if (!KnowledgeGraphHierarchy.edgeAllowed(from, to, edge.relationType())) {
+        throw ApiException.badRequest("节点层级变更会破坏已有关系："
+            + edge.fromNodeKey() + " -> " + edge.toNodeKey() + " (" + edge.relationType() + ")");
+      }
+    }
+  }
+
+  private KnowledgeGraphNode nodeFromRequest(KnowledgeGraphNodeRequest request) {
+    return new KnowledgeGraphNode(
+        normalizedNodeKey(request.nodeKey()),
+        request.label().trim(),
+        KnowledgeGraphHierarchy.normalizeType(request.nodeType()),
+        request.level(),
+        request.summary(),
+        request.content(),
+        request.tags() == null ? List.of() : request.tags(),
+        request.href(),
+        request.sourceType(),
+        request.sourceSlug(),
+        request.x(),
+        request.y(),
+        request.z(),
+        request.visible(),
+        request.sortOrder());
+  }
+
+  private KnowledgeGraphNode findNode(List<KnowledgeGraphNode> nodes, String nodeKey) {
+    return nodes.stream()
+        .filter(node -> node.nodeKey().equals(nodeKey))
+        .findFirst()
+        .orElse(null);
+  }
+
+  private String normalizedNodeKey(String value) {
+    return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
   }
 
   private List<KnowledgeGraphEdge> validKnowledgeGraphEdges(boolean includeHidden) {

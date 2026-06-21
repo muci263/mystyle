@@ -3,6 +3,7 @@ package com.mystyle.portfolio.resume;
 import com.mystyle.portfolio.common.ApiResponse;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeBasicInfo;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeDraftView;
+import com.mystyle.portfolio.resume.ResumeModels.ResumeExtractedText;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeSectionItem;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeUploadTask;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeVersion;
@@ -74,6 +75,11 @@ public class ResumeAdminController {
   @PostMapping("/uploads/parse")
   public ApiResponse<ResumeUploadTask> parseUpload(@Valid @RequestBody ResumeUploadParseRequest request) {
     return ApiResponse.success(resumeAdminService.parseUpload(request));
+  }
+
+  @PostMapping("/uploads/extract-text")
+  public ApiResponse<ResumeExtractedText> extractUploadText(@Valid @RequestBody ResumeFileExtractRequest request) {
+    return ApiResponse.success(resumeAdminService.extractUploadText(request));
   }
 
   @GetMapping("/uploads/{taskId}")

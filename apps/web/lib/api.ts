@@ -295,6 +295,13 @@ export type ResumeUploadTask = {
   updatedAt: string;
 };
 
+export type ResumeExtractedText = {
+  filename: string;
+  contentType: string;
+  rawText: string;
+  charCount: number;
+};
+
 export type JdAnalysisResponse = {
   analysisId: number;
   provider: string;
@@ -323,8 +330,23 @@ export type ResumeOptimizeResponse = {
   role: string;
   summary: string;
   rewrittenSummary: string;
+  generatedResumeMarkdown: string;
   highlights: string[];
   sectionSuggestions: string[];
+  riskNotes: string[];
+};
+
+export type MockInterviewResponse = {
+  provider: string;
+  role: string;
+  questions: Array<{
+    question: string;
+    intent: string;
+    strongAnswer: string;
+    followUps: string[];
+    scoreFocus: string[];
+  }>;
+  closingAdvice: string;
   riskNotes: string[];
 };
 
@@ -400,10 +422,18 @@ export async function apiDelete<T>(path: string): Promise<T> {
 }
 
 async function unwrapResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  let payload: ApiResponse<T> | null = null;
+  try {
+    payload = (await response.json()) as ApiResponse<T>;
+  } catch {
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+    throw new Error("API response is not JSON");
   }
-  const payload = (await response.json()) as ApiResponse<T>;
+  if (!response.ok) {
+    throw new Error(payload.message || `API request failed: ${response.status} ${response.statusText}`);
+  }
   if (payload.code !== 0) {
     throw new Error(payload.message || "API request failed");
   }

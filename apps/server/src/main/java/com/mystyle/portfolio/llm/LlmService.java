@@ -12,6 +12,7 @@ import com.mystyle.portfolio.content.ContentModels.Project;
 import com.mystyle.portfolio.jd.JdAnalysisResponse;
 import com.mystyle.portfolio.jd.JdAnalysisResponse.ModuleRecommendation;
 import com.mystyle.portfolio.jd.JdAnalysisResponse.ProjectRecommendation;
+import com.mystyle.portfolio.llm.MockInterviewResponse.MockInterviewQuestion;
 import com.mystyle.portfolio.resume.ResumeBasicInfoRequest;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeParsedPayload;
 import com.mystyle.portfolio.resume.ResumeSectionItemRequest;
@@ -100,12 +101,17 @@ public class LlmService {
   public ResumeOptimizeResponse optimizeResume(ResumeOptimizeRequest request) {
     String role = request.targetRole() == null || request.targetRole().isBlank() ? "Java 后端开发" : request.targetRole().trim();
     List<String> hints = request.assetHints() == null ? List.of() : request.assetHints();
+    String resumeText = nullToEmpty(request.resumeText()).trim();
+    if (resumeText.isBlank()) {
+      throw ApiException.badRequest("请先上传或粘贴简历内容，再进行 JD 优化。");
+    }
     if (Boolean.TRUE.equals(request.allowFallback())) {
       return new ResumeOptimizeResponse(
           "explicit-rule-fallback",
           role,
           "用户已确认使用规则降级，未调用 Minimax。",
           fallbackSummary(request.resumeText(), role),
+          fallbackGeneratedResume(request.resumeText(), request.jdText(), role, hints),
           List.of(
               "优先保留真实项目证据和量化指标。",
               "围绕岗位 JD 重排项目顺序，突出匹配技术栈。",
@@ -117,20 +123,84 @@ public class LlmService {
         你是简历优化助手。只基于用户提供的真实信息给出中文建议，不编造经历。
         只能输出一个严格 JSON 对象，不要 Markdown，不要代码块，不要解释文字，不要 <think>。
         所有数组项必须是字符串，字符串内的双引号必须转义。
-        返回 JSON：{"summary":"...","rewrittenSummary":"...","highlights":["..."],"sectionSuggestions":["..."],"riskNotes":["..."]}。
+        目标是基于上传简历和岗位 JD 生成一份可投递的“JD 适配版简历”。
+        生成规则：
+        1. generatedResumeMarkdown 必须是完整中文简历 Markdown，包含：姓名/标题摘要、技术能力、项目经历、实习或实践经历、个人优势。
+        2. 可以重排、压缩、改写表达，但不得新增上传简历中不存在的公司、学校、项目、奖项、数字指标。
+        3. 如果 JD 要求但简历没有证据，写入 riskNotes，不要硬塞到简历正文。
+        4. rewrittenSummary 是适合放在简历开头的 1 段候选摘要。
+        返回 JSON：{"summary":"...","rewrittenSummary":"...","generatedResumeMarkdown":"# 简历...","highlights":["..."],"sectionSuggestions":["..."],"riskNotes":["..."]}。
         目标岗位：%s
         简历文本：%s
         岗位JD：%s
         资产提示：%s
         """.formatted(role, nullToEmpty(request.resumeText()), nullToEmpty(request.jdText()), String.join("、", hints)));
     JsonNode json = extractJson(content);
+    String summary = requiredText(json, "summary", "简历优化 summary");
+    String rewrittenSummary = requiredText(json, "rewrittenSummary", "简历优化 rewrittenSummary");
+    String generatedResumeMarkdown = requiredText(json, "generatedResumeMarkdown", "简历优化 generatedResumeMarkdown");
+    assertNoUnsafeGeneratedText(
+        "简历优化 generatedResumeMarkdown",
+        generatedResumeMarkdown,
+        resumeText + "\n" + nullToEmpty(request.jdText()) + "\n" + String.join("\n", hints));
     return new ResumeOptimizeResponse(
         providerName(),
         role,
-        requiredText(json, "summary", "简历优化 summary"),
-        requiredText(json, "rewrittenSummary", "简历优化 rewrittenSummary"),
+        summary,
+        rewrittenSummary,
+        generatedResumeMarkdown,
         strings(json, "highlights"),
         strings(json, "sectionSuggestions"),
+        strings(json, "riskNotes"));
+  }
+
+  public MockInterviewResponse mockInterview(MockInterviewRequest request) {
+    String role = request.targetRole() == null || request.targetRole().isBlank() ? "Java 后端开发" : request.targetRole().trim();
+    List<String> hints = request.assetHints() == null ? List.of() : request.assetHints();
+    String resumeText = nullToEmpty(request.resumeText()).trim();
+    if (resumeText.isBlank()) {
+      throw ApiException.badRequest("请先上传或生成简历内容，再进行模拟面试。");
+    }
+    if (Boolean.TRUE.equals(request.allowFallback())) {
+      return new MockInterviewResponse(
+          "explicit-rule-fallback",
+          role,
+          fallbackInterviewQuestions(role, hints),
+          "用户已确认使用规则降级，建议优先围绕真实项目、岗位关键词和风险缺口做 3 轮演练。",
+          List.of("这是用户显式触发的规则降级结果，不是模型输出。"));
+    }
+    String content = callMinimax("""
+        你是严谨的 Java 后端面试官和面试教练。请基于上传简历与 JD 生成模拟面试问答。
+        只能输出一个严格 JSON 对象，不要 Markdown，不要代码块，不要解释文字，不要 <think>。
+        边界：
+        1. 只能基于简历、JD、资产提示发问和作答，不得编造候选人没有的经历。
+        2. strongAnswer 要像候选人口吻，结构为：结论 -> 项目证据 -> 技术细节 -> 结果/反思。
+        3. followUps 是面试官可能继续追问的问题；scoreFocus 是回答时要命中的评分点。
+        4. 至少 5 题，覆盖：自我介绍、岗位匹配、最强项目、技术深挖、问题排查/优化、AI/RAG 或加分项。
+        返回 JSON：
+        {
+          "questions":[
+            {"question":"...","intent":"...","strongAnswer":"...","followUps":["..."],"scoreFocus":["..."]}
+          ],
+          "closingAdvice":"...",
+          "riskNotes":["..."]
+        }
+        目标岗位：%s
+        岗位JD：%s
+        简历文本：%s
+        资产提示：%s
+        """.formatted(role, nullToEmpty(request.jdText()), resumeText, String.join("、", hints)));
+    JsonNode json = extractJson(content);
+    List<MockInterviewQuestion> questions = interviewQuestions(json.path("questions"));
+    if (questions.isEmpty()) {
+      throw ApiException.upstream("Minimax 已调用，但没有返回可用的模拟面试问题；本次不生成替代结果。");
+    }
+    assertInterviewRespectsSources(questions, resumeText + "\n" + nullToEmpty(request.jdText()) + "\n" + String.join("\n", hints));
+    return new MockInterviewResponse(
+        providerName(),
+        role,
+        questions,
+        requiredText(json, "closingAdvice", "模拟面试 closingAdvice"),
         strings(json, "riskNotes"));
   }
 
@@ -255,7 +325,7 @@ public class LlmService {
             Map.of("role", "system", "content", "你是作品集知识图谱与简历优化助手。除非用户明确要求自然语言回答，否则输出必须是严格 JSON；不要输出 Markdown 代码块或 <think> 推理文本。"),
             Map.of("role", "user", "content", prompt)),
         "temperature", 0.2,
-        "max_tokens", 3000);
+        "max_tokens", 5000);
     String response;
     try {
       response = restClient.post()
@@ -558,6 +628,158 @@ public class LlmService {
       return prefix + " 可优先强调 Redis、MySQL、Spring Boot 等后端能力。";
     }
     return prefix;
+  }
+
+  private String fallbackGeneratedResume(String resumeText, String jdText, String role, List<String> hints) {
+    List<String> keywords = fallbackKeywords(jdText, hints);
+    String evidence = trimTo(nullToEmpty(resumeText), 3600);
+    return """
+        # JD 适配简历草案
+
+        ## 求职方向
+        %s
+
+        ## 简历摘要
+        %s
+
+        ## 关键词对齐
+        %s
+
+        ## 项目与经历证据
+        %s
+
+        ## 投递前人工确认
+        - 本草案来自用户显式触发的规则兜底，不是模型输出。
+        - 已保留原始简历证据，请人工补充真实量化指标、项目职责边界和可验证链接。
+        - JD 中没有简历证据支撑的要求，不应写入正式简历正文。
+        """.formatted(
+            role,
+            fallbackSummary(resumeText, role),
+            keywords.isEmpty()
+                ? "- 暂未从 JD 或资产提示中提取到稳定关键词。"
+                : keywords.stream().map(item -> "- " + item).collect(java.util.stream.Collectors.joining("\n")),
+            evidence.isBlank() ? "原始简历内容为空。" : evidence);
+  }
+
+  private List<String> fallbackKeywords(String jdText, List<String> hints) {
+    LinkedHashSet<String> result = new LinkedHashSet<>();
+    String source = (nullToEmpty(jdText) + " " + String.join(" ", hints)).toLowerCase(Locale.ROOT);
+    Map<String, String> candidates = Map.ofEntries(
+        Map.entry("spring boot", "Spring Boot"),
+        Map.entry("springcloud", "Spring Cloud"),
+        Map.entry("spring cloud", "Spring Cloud"),
+        Map.entry("redis", "Redis"),
+        Map.entry("mysql", "MySQL"),
+        Map.entry("java", "Java"),
+        Map.entry("微服务", "微服务"),
+        Map.entry("rag", "RAG"),
+        Map.entry("ai", "AI 应用"),
+        Map.entry("docker", "Docker"),
+        Map.entry("kubernetes", "Kubernetes"),
+        Map.entry("kafka", "Kafka"),
+        Map.entry("缓存", "缓存优化"),
+        Map.entry("并发", "并发控制"),
+        Map.entry("接口", "接口设计"));
+    candidates.forEach((needle, label) -> {
+      if (source.contains(needle)) {
+        result.add(label);
+      }
+    });
+    hints.stream()
+        .filter(item -> item != null && !item.isBlank())
+        .limit(4)
+        .forEach(item -> result.add(trimTo(item, 60)));
+    return result.stream().limit(10).toList();
+  }
+
+  private List<MockInterviewQuestion> fallbackInterviewQuestions(String role, List<String> hints) {
+    String asset = hints.isEmpty() ? "你最有把握的项目" : hints.get(0);
+    List<MockInterviewQuestion> questions = new ArrayList<>();
+    questions.add(new MockInterviewQuestion(
+        "请用 1 分钟介绍自己，并说明为什么匹配" + role + "。",
+        "验证候选人能否把教育背景、技术栈和岗位要求收束成清晰主线。",
+        "我会先用一句话定位自己：我主要面向 Java 后端与工程化场景，项目里重点使用 Spring Boot、Redis、MySQL 等技术解决真实业务问题。和这个岗位匹配的地方在于，我不仅能完成接口开发，也会关注缓存一致性、数据落库、异常处理和可复盘的项目证据。接下来我会优先讲最能支撑 JD 要求的项目，再补充相关技术细节。",
+        List.of("你认为自己和其他后端候选人的差异是什么？", "如果只保留一个项目讲给面试官，你会选哪个？"),
+        List.of("岗位关键词", "真实项目证据", "表达结构", "不夸大经历")));
+    questions.add(new MockInterviewQuestion(
+        "请展开讲一下 " + asset + "，你负责了什么，难点在哪里？",
+        "验证项目职责边界、技术选型和问题拆解能力。",
+        "我会按背景、职责、方案、结果来讲。背景是项目中存在一个明确业务问题；我负责其中的后端模块实现和联调。难点不只是写接口，而是要考虑数据状态、缓存与数据库之间的一致性，以及异常情况下的兜底。方案上我会先保证核心链路可观测，再把高频读写放到合适的位置优化。结果部分我会只说简历中真实可验证的指标或现象，没有数据的地方会说明是体验或稳定性改善。",
+        List.of("这个方案有没有替代选型？", "你负责的代码边界具体到哪些接口或表？"),
+        List.of("职责边界", "技术取舍", "业务结果", "可验证细节")));
+    questions.add(new MockInterviewQuestion(
+        "如果 Redis 缓存和 MySQL 数据出现不一致，你会如何排查和修复？",
+        "考察后端排障、缓存策略和一致性理解。",
+        "我会先确认不一致的范围和时间窗口，再看写入链路是否存在异常重试、事务提交后缓存更新失败、并发覆盖或过期策略问题。短期修复上，可以通过日志、数据对账和补偿任务恢复数据；长期方案会根据业务选择先写库再删缓存、延迟双删、消息补偿或幂等更新。回答时我会结合项目中真实用过的 Redis 场景说明，而不是泛泛背方案。",
+        List.of("为什么不是先删缓存再写库？", "如何保证补偿任务不会重复写坏数据？"),
+        List.of("排查顺序", "一致性模型", "幂等", "项目关联")));
+    questions.add(new MockInterviewQuestion(
+        "JD 提到 AI/RAG 加分项时，你会怎样把自己的项目讲得可信？",
+        "验证候选人能否处理加分项和证据不足的边界。",
+        "我会明确区分已经落地的工程能力和正在学习验证的 AI 能力。如果项目里只是做了 Agent Workflow 或 RAG Demo，我会说清楚输入输出契约、工具边界、失败兜底和日志观测，而不会声称做过真实线上大规模 RAG。这样既能展示我对 AI 工程化的理解，也不会突破简历真实性边界。",
+        List.of("RAG 和普通关键词检索有什么区别？", "LLM 接口失败时产品应该如何降级？"),
+        List.of("边界意识", "工程化理解", "失败处理", "真实性")));
+    questions.add(new MockInterviewQuestion(
+        "请说一个你项目中做过的优化点，为什么它是必要的？",
+        "考察问题意识、优化前后对比和复盘能力。",
+        "我会先说优化前的痛点，例如响应慢、重复查询、状态不同步或用户体验不稳定。然后解释我如何定位原因，比如通过日志、接口响应、SQL 或缓存命中情况确认瓶颈。方案会控制在我真实做过的范围内，例如缓存进度、减少重复落库、优化数据结构或补充异常处理。最后补充结果和反思：哪些指标改善了，哪些地方还需要更严谨的数据支撑。",
+        List.of("你如何证明这个优化有效？", "如果数据量放大 10 倍，方案会有什么问题？"),
+        List.of("问题定义", "定位证据", "方案约束", "复盘意识")));
+    return questions;
+  }
+
+  private List<MockInterviewQuestion> interviewQuestions(JsonNode array) {
+    if (!array.isArray()) {
+      return List.of();
+    }
+    List<MockInterviewQuestion> result = new ArrayList<>();
+    for (JsonNode item : array) {
+      String question = text(item, "question", "");
+      String strongAnswer = text(item, "strongAnswer", "");
+      if (question.isBlank() || strongAnswer.isBlank()) {
+        continue;
+      }
+      result.add(new MockInterviewQuestion(
+          trimTo(question, 600),
+          trimTo(text(item, "intent", ""), 600),
+          strongAnswer.trim(),
+          strings(item, "followUps"),
+          strings(item, "scoreFocus")));
+    }
+    return result;
+  }
+
+  private void assertInterviewRespectsSources(List<MockInterviewQuestion> questions, String sourceText) {
+    for (MockInterviewQuestion question : questions) {
+      assertNoUnsafeGeneratedText("模拟面试 strongAnswer", question.strongAnswer(), sourceText);
+    }
+  }
+
+  private void assertNoUnsafeGeneratedText(String label, String value, String sourceText) {
+    String normalized = nullToEmpty(value);
+    if (normalized.matches("(?s).*\\[[^\\]]{1,40}\\].*")) {
+      throw ApiException.upstream("Minimax 已调用，但" + label + "包含占位符，已拒绝返回可能误导用户的结果。");
+    }
+    String lowered = normalized.toLowerCase(Locale.ROOT);
+    List<String> unsafeTokens = List.of(
+        "xxx",
+        "学校名称",
+        "专业名称",
+        "公司名称",
+        "某公司",
+        "某项目",
+        "示例项目",
+        "通用回答",
+        "未提供具体",
+        "假设你",
+        "学生信息管理系统");
+    String source = nullToEmpty(sourceText).toLowerCase(Locale.ROOT);
+    for (String token : unsafeTokens) {
+      String loweredToken = token.toLowerCase(Locale.ROOT);
+      if (lowered.contains(loweredToken) && !source.contains(loweredToken)) {
+        throw ApiException.upstream("Minimax 已调用，但" + label + "包含疑似占位或编造内容：" + token + "；已拒绝返回替代结果。");
+      }
+    }
   }
 
   private String trimTo(String value, int maxLength) {

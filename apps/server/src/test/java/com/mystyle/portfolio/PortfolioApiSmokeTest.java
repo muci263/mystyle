@@ -38,7 +38,15 @@ import com.mystyle.portfolio.resume.ResumeAdminController;
 import com.mystyle.portfolio.resume.ResumeAdminService;
 import com.mystyle.portfolio.resume.ResumePublicController;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.UUID;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -223,6 +231,24 @@ class PortfolioApiSmokeTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("不能跨级连接：三级 节点不能直接连接 一级 节点"));
 
+    String tertiaryEdgeResponse = mockMvc.perform(post("/admin/knowledge-graph/edges")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "fromNodeKey": "blog-test-note",
+                  "toNodeKey": "skill-redis",
+                  "relationType": "EXPLAINS",
+                  "visible": false,
+                  "sortOrder": 1001
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.fromNodeKey").value("blog-test-note"))
+        .andExpect(jsonPath("$.data.toNodeKey").value("skill-redis"))
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
+
     String edgeResponse = mockMvc.perform(post("/admin/knowledge-graph/edges")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
@@ -239,6 +265,35 @@ class PortfolioApiSmokeTest {
         .andReturn()
         .getResponse()
         .getContentAsString();
+
+    mockMvc.perform(put("/admin/knowledge-graph/nodes/blog-test-note")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "nodeKey": "blog-test-note",
+                  "label": "测试博客节点错误改层级",
+                  "nodeType": "SECTION",
+                  "level": 1,
+                  "summary": "不能在已有三级关系时改成二级栏目",
+                  "content": "用于校验已有关系保护。",
+                  "tags": ["Section"],
+                  "href": "",
+                  "sourceType": "MANUAL",
+                  "sourceSlug": "",
+                  "x": 1.3,
+                  "y": -3.5,
+                  "z": 0.1,
+                  "visible": true,
+                  "sortOrder": 1000
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("节点层级变更会破坏已有关系")));
+
+    long tertiaryEdgeId = tertiaryEdgeResponse.contains("\"id\":") ? Long.parseLong(tertiaryEdgeResponse.replaceAll(".*\\\"id\\\":(\\d+).*", "$1")) : 0;
+    mockMvc.perform(delete("/admin/knowledge-graph/edges/{edgeId}", tertiaryEdgeId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data").value("DELETED"));
 
     long edgeId = edgeResponse.contains("\"id\":") ? Long.parseLong(edgeResponse.replaceAll(".*\\\"id\\\":(\\d+).*", "$1")) : 0;
     mockMvc.perform(delete("/admin/knowledge-graph/edges/{edgeId}", edgeId))
@@ -280,6 +335,10 @@ class PortfolioApiSmokeTest {
             .param("allowFallback", "true"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"));
+
+    mockMvc.perform(get("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate", "blog-redis-video-progress-buffer"))
+        .andExpect(status().isMethodNotAllowed())
+        .andExpect(jsonPath("$.code").value(40500));
   }
 
   @Test
@@ -382,6 +441,66 @@ class PortfolioApiSmokeTest {
         .andExpect(jsonPath("$.data.version.status").value("DRAFT"))
         .andExpect(jsonPath("$.data.basicInfo.name").value("赵豪然"))
         .andExpect(jsonPath("$.data.sections.SKILL[0].title").value("Java / Spring Boot"));
+
+    String textResumeBase64 = Base64.getEncoder().encodeToString(
+        "赵豪然\nJava 后端开发\n项目经历\nRedis 视频进度缓存".getBytes(StandardCharsets.UTF_8));
+    mockMvc.perform(post("/admin/resume/uploads/extract-text")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "filename": "resume.txt",
+                  "contentType": "text/plain",
+                  "contentBase64": "%s"
+                }
+                """.formatted(textResumeBase64)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rawText").value("赵豪然\nJava 后端开发\n项目经历\nRedis 视频进度缓存"));
+
+    ByteArrayOutputStream docxOutput = new ByteArrayOutputStream();
+    try (XWPFDocument document = new XWPFDocument()) {
+      document.createParagraph().createRun().setText("赵豪然 DOCX 简历");
+      document.createParagraph().createRun().setText("Spring Boot Redis MySQL");
+      document.write(docxOutput);
+    }
+    String docxResumeBase64 = Base64.getEncoder().encodeToString(docxOutput.toByteArray());
+    mockMvc.perform(post("/admin/resume/uploads/extract-text")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "filename": "resume.docx",
+                  "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                  "contentBase64": "%s"
+                }
+                """.formatted(docxResumeBase64)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rawText").value(org.hamcrest.Matchers.containsString("赵豪然 DOCX 简历")))
+        .andExpect(jsonPath("$.data.rawText").value(org.hamcrest.Matchers.containsString("Spring Boot Redis MySQL")));
+
+    ByteArrayOutputStream pdfOutput = new ByteArrayOutputStream();
+    try (PDDocument document = new PDDocument()) {
+      PDPage page = new PDPage();
+      document.addPage(page);
+      try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+        contentStream.beginText();
+        contentStream.setFont(PDType1Font.HELVETICA, 12);
+        contentStream.newLineAtOffset(72, 720);
+        contentStream.showText("Resume PDF Java Redis MySQL");
+        contentStream.endText();
+      }
+      document.save(pdfOutput);
+    }
+    String pdfResumeBase64 = Base64.getEncoder().encodeToString(pdfOutput.toByteArray());
+    mockMvc.perform(post("/admin/resume/uploads/extract-text")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "filename": "resume.pdf",
+                  "contentType": "application/pdf",
+                  "contentBase64": "%s"
+                }
+                """.formatted(pdfResumeBase64)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rawText").value(org.hamcrest.Matchers.containsString("Resume PDF Java Redis MySQL")));
 
     mockMvc.perform(put("/admin/resume/basic-info")
             .contentType(MediaType.APPLICATION_JSON)
@@ -498,6 +617,34 @@ class PortfolioApiSmokeTest {
                 """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"))
+        .andExpect(jsonPath("$.data.generatedResumeMarkdown").exists())
+        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是用户显式触发的规则降级结果，不是模型输出。"));
+
+    mockMvc.perform(post("/llm/interview/mock")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "resumeText": "赵豪然，Java 后端开发，做过 Redis 与 Spring Boot 项目。",
+                  "jdText": "Java 后端实习，要求 Spring Boot、Redis、MySQL",
+                  "targetRole": "Java 后端开发实习生"
+                }
+                """))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value(50310));
+
+    mockMvc.perform(post("/llm/interview/mock")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "resumeText": "赵豪然，Java 后端开发，做过 Redis 与 Spring Boot 项目。",
+                  "jdText": "Java 后端实习，要求 Spring Boot、Redis、MySQL",
+                  "targetRole": "Java 后端开发实习生",
+                  "allowFallback": true
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"))
+        .andExpect(jsonPath("$.data.questions[0].question").exists())
         .andExpect(jsonPath("$.data.riskNotes[0]").value("这是用户显式触发的规则降级结果，不是模型输出。"));
 
     mockMvc.perform(post("/jd/analyze")

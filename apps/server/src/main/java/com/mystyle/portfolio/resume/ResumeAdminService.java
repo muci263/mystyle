@@ -107,7 +107,7 @@ public class ResumeAdminService {
         rawText,
         "PARSED",
         parsedJson,
-        allowFallback ? "已按用户确认使用规则解析，请确认后写入草稿" : "Minimax 已完成真实结构化扫描，请确认后写入草稿");
+        allowFallback ? "已生成可确认的结构化草稿，请确认后写入草稿" : "Minimax 已完成真实结构化扫描，请确认后写入草稿");
   }
 
   public ResumeExtractedText extractUploadText(ResumeFileExtractRequest request) {

@@ -13,6 +13,10 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen">
       <PointerTrail />
+      <div className="editorial-topline">
+        <span>Engineering Evidence / Backend Portfolio</span>
+        <span className="hidden sm:inline">Shanxi University / Software Engineering</span>
+      </div>
       <nav className="site-nav-pill">
         <div className="mx-auto flex h-full items-center justify-between px-4 md:px-5">
           <Link href="/" className="flex items-center gap-3 text-ink">
@@ -51,20 +55,17 @@ export function PageHeader({
   description: string;
 }) {
   return (
-    <section className="subpage-stage console-grid">
-      <div aria-hidden="true" className="subpage-signal">
-        <span className="subpage-signal-orbit subpage-signal-orbit-a" />
-        <span className="subpage-signal-orbit subpage-signal-orbit-b" />
-        <span className="subpage-signal-axis" />
-        <span className="subpage-signal-core" />
-      </div>
-      <div className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-32 md:px-8 md:pb-24 md:pt-36">
+    <section className="subpage-stage editorial-hero">
+      <div className="mx-auto grid max-w-7xl gap-9 px-5 pb-16 pt-32 md:px-8 md:pb-20 md:pt-36 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
         <FadeIn>
-          <p className="eyebrow technical-label">{eyebrow}</p>
-          <h1 className="display mt-7 max-w-5xl text-5xl leading-[1.04] text-white md:text-8xl">
+          <p className="eyebrow">{eyebrow}</p>
+          <h1 className="display editorial-hero-title mt-7 max-w-6xl text-balance text-5xl leading-[0.92] text-ink md:text-8xl">
             {title}
           </h1>
-          <p className="mt-8 max-w-2xl text-base leading-8 text-white/68 md:text-lg">{description}</p>
+        </FadeIn>
+        <FadeIn delay={0.08} className="editorial-hero-aside">
+          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent">Current Section</p>
+          <p className="mt-4 text-sm leading-7 text-graphite">{description}</p>
         </FadeIn>
       </div>
     </section>
@@ -81,4 +82,101 @@ export function Surface({
   id?: string;
 }) {
   return <MotionSurface id={id} className={className}>{children}</MotionSurface>;
+}
+
+export function EditorialHero({
+  eyebrow,
+  title,
+  description,
+  rightLabel = "Portfolio System",
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  rightLabel?: string;
+}) {
+  return (
+    <section className="editorial-hero">
+      <div className="mx-auto grid max-w-7xl gap-9 px-5 py-16 md:px-8 md:py-20 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h1 className="display editorial-hero-title mt-7 text-balance text-5xl leading-[0.92] md:text-8xl">
+            {title}
+          </h1>
+        </div>
+        <div className="editorial-hero-aside">
+          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent">{rightLabel}</p>
+          <p className="mt-4 text-sm leading-7 text-graphite">{description}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function EditorialGrid({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <section className={`editorial-grid mx-auto max-w-7xl px-5 md:px-8 ${className}`}>{children}</section>;
+}
+
+export function EditorialBackdrop({
+  children,
+  word,
+  className = "",
+}: {
+  children: React.ReactNode;
+  word: string;
+  className?: string;
+}) {
+  return (
+    <section className={`editorial-backdrop ${className}`} data-word={word}>
+      <div className="editorial-backdrop-inner mx-auto max-w-7xl px-5 md:px-8">{children}</div>
+    </section>
+  );
+}
+
+export function FeatureShelf({
+  eyebrow,
+  title,
+  children,
+  className = "",
+}: {
+  eyebrow: string;
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`feature-shelf mx-auto max-w-7xl px-5 md:px-8 ${className}`}>
+      <div className="feature-shelf-head">
+        <p className="eyebrow">{eyebrow}</p>
+        <h2 className="display-light mt-4 text-4xl leading-none text-ink md:text-5xl">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function AdminWorktop({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="admin-worktop">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1 className="display mt-5 text-5xl leading-[0.92] md:text-7xl">{title}</h1>
+      </div>
+      {children}
+    </div>
+  );
 }

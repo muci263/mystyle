@@ -97,9 +97,9 @@ class PortfolioApiSmokeTest {
             new ResumeAdminController(resumeAdminService),
             new ResumePublicController(resumeAdminService),
             new JdController(jdAnalysisService),
-            new LlmController(llmService),
+            new LlmController(llmService, objectMapper),
             new VideoLearningController(videoLearningService),
-            new AgentWorkflowController(agentWorkflowService),
+            new AgentWorkflowController(agentWorkflowService, objectMapper),
             new AnalyticsController(analyticsService))
         .setControllerAdvice(new GlobalExceptionHandler())
         .addFilters(corsConfig.corsFilter())
@@ -334,7 +334,7 @@ class PortfolioApiSmokeTest {
     mockMvc.perform(post("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate", "blog-redis-video-progress-buffer")
             .param("allowFallback", "true"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"));
+        .andExpect(jsonPath("$.data.provider").value("local-template"));
 
     mockMvc.perform(get("/admin/knowledge-graph/nodes/{nodeKey}/auto-relate", "blog-redis-video-progress-buffer"))
         .andExpect(status().isMethodNotAllowed())
@@ -566,7 +566,7 @@ class PortfolioApiSmokeTest {
                 """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.status").value("PARSED"))
-        .andExpect(jsonPath("$.data.errorMessage").value("已按用户确认使用规则解析，请确认后写入草稿"))
+        .andExpect(jsonPath("$.data.errorMessage").value("已生成可确认的结构化草稿，请确认后写入草稿"))
         .andReturn()
         .getResponse()
         .getContentAsString();
@@ -614,11 +614,11 @@ class PortfolioApiSmokeTest {
                   "targetRole": "Java 后端开发实习生",
                   "allowFallback": true
                 }
-                """))
+        """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"))
+        .andExpect(jsonPath("$.data.provider").value("local-template"))
         .andExpect(jsonPath("$.data.generatedResumeMarkdown").exists())
-        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是用户显式触发的规则降级结果，不是模型输出。"));
+        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是本地模板生成的辅助结果，请人工确认后使用。"));
 
     mockMvc.perform(post("/llm/interview/mock")
             .contentType(MediaType.APPLICATION_JSON)
@@ -641,11 +641,11 @@ class PortfolioApiSmokeTest {
                   "targetRole": "Java 后端开发实习生",
                   "allowFallback": true
                 }
-                """))
+        """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"))
+        .andExpect(jsonPath("$.data.provider").value("local-template"))
         .andExpect(jsonPath("$.data.questions[0].question").exists())
-        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是用户显式触发的规则降级结果，不是模型输出。"));
+        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是本地模板生成的辅助结果，请人工确认后使用。"));
 
     mockMvc.perform(post("/jd/analyze")
             .contentType(MediaType.APPLICATION_JSON)
@@ -666,10 +666,10 @@ class PortfolioApiSmokeTest {
                   "variantName": "Java 后端实习岗位",
                   "allowFallback": true
                 }
-                """))
+        """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.provider").value("explicit-rule-fallback"))
-        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是用户显式触发的规则降级结果，不是模型输出。"));
+        .andExpect(jsonPath("$.data.provider").value("local-template"))
+        .andExpect(jsonPath("$.data.riskNotes[0]").value("这是本地模板生成的辅助结果，请人工确认后使用。"));
   }
 
   @Test

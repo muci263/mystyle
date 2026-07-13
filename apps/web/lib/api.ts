@@ -350,6 +350,45 @@ export type MockInterviewResponse = {
   riskNotes: string[];
 };
 
+export type InterviewAnswer = {
+  question: string;
+  answer: string;
+  intent: string;
+  scoreFocus: string[];
+};
+
+export type InterviewTurnResponse = {
+  provider: string;
+  role: string;
+  round: number;
+  question: string;
+  intent: string;
+  followUps: string[];
+  scoreFocus: string[];
+  canFinish: boolean;
+  notes: string[];
+};
+
+export type InterviewFinalizeResponse = {
+  provider: string;
+  role: string;
+  summary: string;
+  generatedResumeMarkdown: string;
+  highlights: string[];
+  resumeSuggestions: string[];
+  interviewFeedback: string[];
+  nextActions: string[];
+  riskNotes: string[];
+  questionCount: number;
+};
+
+export type StreamEvent<T> = {
+  type: "progress" | "final" | "error" | string;
+  step: string;
+  message: string;
+  data?: T;
+};
+
 export type VideoLearningSnapshot = {
   redisRecord: Record<string, unknown>;
   mysqlRecord: Record<string, unknown>;
@@ -382,6 +421,10 @@ function apiBase() {
   return process.env.API_INTERNAL_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
 }
 
+export function apiUrl(path: string) {
+  return `${apiBase()}${path}`;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${apiBase()}${path}`, {
     cache: "no-store",
@@ -399,6 +442,68 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     cache: "no-store",
   });
   return unwrapResponse<T>(response);
+}
+
+export async function apiPostNdjson<T>(
+  path: string,
+  body: unknown,
+  onEvent: (event: StreamEvent<T>) => void | Promise<void>,
+): Promise<T> {
+  const response = await fetch(apiUrl(path), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/x-ndjson",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!response.ok || !response.body) {
+    let message = `API request failed: ${response.status} ${response.statusText}`;
+    try {
+      const payload = (await response.json()) as ApiResponse<unknown>;
+      message = payload.message || message;
+    } catch {
+      // Keep the HTTP status message.
+    }
+    throw new Error(message);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalData: T | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const event = JSON.parse(trimmed) as StreamEvent<T>;
+      await onEvent(event);
+      if (event.type === "final") {
+        finalData = event.data ?? null;
+      }
+    }
+  }
+
+  const tail = buffer.trim();
+  if (tail) {
+    const event = JSON.parse(tail) as StreamEvent<T>;
+    await onEvent(event);
+    if (event.type === "final") {
+      finalData = event.data ?? null;
+    }
+  }
+
+  if (!finalData) {
+    throw new Error("流式接口没有返回最终结果。");
+  }
+  return finalData;
 }
 
 export async function apiPut<T>(path: string, body?: unknown): Promise<T> {

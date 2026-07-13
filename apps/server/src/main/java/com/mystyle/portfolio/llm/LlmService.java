@@ -17,13 +17,19 @@ import com.mystyle.portfolio.resume.ResumeBasicInfoRequest;
 import com.mystyle.portfolio.resume.ResumeModels.ResumeParsedPayload;
 import com.mystyle.portfolio.resume.ResumeSectionItemRequest;
 import com.mystyle.portfolio.resume.ResumeSectionType;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -38,25 +44,43 @@ public class LlmService {
   private final String baseUrl;
   private final String textModel;
   private final String visionModel;
+  private final LlmBudgetService budgetService;
   private volatile String authFailureMessage = "";
 
+  @Autowired
   public LlmService(
       ObjectMapper objectMapper,
       @Value("${app.llm.minimax.api-key:${MINIMAX_API_KEY:}}") String apiKey,
       @Value("${app.llm.minimax.base-url:${MINIMAX_BASE_URL:https://api.minimaxi.com/v1}}") String baseUrl,
       @Value("${app.llm.minimax.text-model:${MINIMAX_TEXT_MODEL:MiniMax-M2.7}}") String textModel,
-      @Value("${app.llm.minimax.vision-model:${MINIMAX_VISION_MODEL:MiniMax-Text-01}}") String visionModel) {
+      @Value("${app.llm.minimax.vision-model:${MINIMAX_VISION_MODEL:MiniMax-Text-01}}") String visionModel,
+      LlmBudgetService budgetService) {
     this.objectMapper = objectMapper;
     this.apiKey = apiKey == null ? "" : apiKey.trim();
     this.baseUrl = trimTrailingSlash(baseUrl == null ? "https://api.minimaxi.com/v1" : baseUrl.trim());
     this.textModel = textModel == null || textModel.isBlank() ? "MiniMax-M2.7" : textModel.trim();
     this.visionModel = visionModel == null || visionModel.isBlank() ? "MiniMax-Text-01" : visionModel.trim();
+    this.budgetService = budgetService;
     this.restClient = RestClient.builder().baseUrl(this.baseUrl).build();
+  }
+
+  public LlmService(
+      ObjectMapper objectMapper,
+      String apiKey,
+      String baseUrl,
+      String textModel,
+      String visionModel) {
+    this(objectMapper, apiKey, baseUrl, textModel, visionModel, new LlmBudgetService(
+        java.time.Clock.system(java.time.ZoneId.of("Asia/Shanghai")),
+        true,
+        5.0,
+        2.1,
+        8.4));
   }
 
   public LlmProviderStatus status() {
     String mode = !configured() ? "missing-api-key" : authFailureMessage.isBlank() ? "minimax" : "auth-error";
-    return new LlmProviderStatus(providerName(), configured(), textModel, visionModel, mode);
+    return new LlmProviderStatus(providerName(), configured(), textModel, visionModel, mode, budgetService.status());
   }
 
   public List<KnowledgeRelationSuggestion> suggestKnowledgeRelations(
@@ -77,16 +101,33 @@ public class LlmService {
     return suggestKnowledgeRelationsDetailed(node, graph, RelationTask.TERTIARY_PARENT_ONLY);
   }
 
+  public KnowledgeRelationResult suggestKnowledgeOrchestrateRelationsDetailed(
+      KnowledgeGraphNode node,
+      KnowledgeGraphView graph) {
+    return suggestKnowledgeRelationsDetailed(node, graph, RelationTask.TERTIARY_ORCHESTRATE);
+  }
+
   private KnowledgeRelationResult suggestKnowledgeRelationsDetailed(
       KnowledgeGraphNode node,
       KnowledgeGraphView graph,
       RelationTask task) {
-    String content = callMinimax(task == RelationTask.TERTIARY_PARENT_ONLY
-        ? buildKnowledgeParentPrompt(node, graph)
-        : buildKnowledgePrompt(node, graph));
+    String content = callMinimax(switch (task) {
+      case TERTIARY_PARENT_ONLY -> buildKnowledgeParentPrompt(node, graph);
+      case TERTIARY_ORCHESTRATE -> buildKnowledgeOrchestratePrompt(node, graph);
+      case FULL -> buildKnowledgePrompt(node, graph);
+    });
     List<KnowledgeRelationSuggestion> suggestions = parseRelationSuggestions(content);
     List<KnowledgeRelationSuggestion> sanitized = sanitizeSuggestions(node, graph, suggestions);
     if (sanitized.isEmpty()) {
+      if (task == RelationTask.TERTIARY_PARENT_ONLY || task == RelationTask.TERTIARY_ORCHESTRATE) {
+        return new KnowledgeRelationResult(
+            providerName(),
+            true,
+            true,
+            true,
+            List.of(),
+            List.of("Minimax 模型调用成功，但没有返回需要新增的候选关系。"));
+      }
       throw ApiException.upstream("Minimax 已调用，但没有返回符合图谱层级规则的候选关系；本次不创建任何替代关系。");
     }
     return new KnowledgeRelationResult(
@@ -107,9 +148,9 @@ public class LlmService {
     }
     if (Boolean.TRUE.equals(request.allowFallback())) {
       return new ResumeOptimizeResponse(
-          "explicit-rule-fallback",
+          "local-template",
           role,
-          "用户已确认使用规则降级，未调用 Minimax。",
+          "已生成本地辅助草稿，请结合真实经历人工确认后使用。",
           fallbackSummary(request.resumeText(), role),
           fallbackGeneratedResume(request.resumeText(), request.jdText(), role, hints),
           List.of(
@@ -117,7 +158,7 @@ public class LlmService {
               "围绕岗位 JD 重排项目顺序，突出匹配技术栈。",
               hints.isEmpty() ? "补充可验证的实习、项目和模块 Demo 证据。" : "可重点引用：" + String.join("、", hints)),
           List.of("项目经历：按 JD 关键词重排，先讲最匹配项目。", "技术能力：把 JD 高频技术栈前置。"),
-          List.of("这是用户显式触发的规则降级结果，不是模型输出。"));
+          List.of("这是本地模板生成的辅助结果，请人工确认后使用。"));
     }
     String content = callMinimax("""
         你是简历优化助手。只基于用户提供的真实信息给出中文建议，不编造经历。
@@ -163,11 +204,11 @@ public class LlmService {
     }
     if (Boolean.TRUE.equals(request.allowFallback())) {
       return new MockInterviewResponse(
-          "explicit-rule-fallback",
+          "local-template",
           role,
           fallbackInterviewQuestions(role, hints),
-          "用户已确认使用规则降级，建议优先围绕真实项目、岗位关键词和风险缺口做 3 轮演练。",
-          List.of("这是用户显式触发的规则降级结果，不是模型输出。"));
+          "建议优先围绕真实项目、岗位关键词和风险缺口做 3 轮演练。",
+          List.of("这是本地模板生成的辅助结果，请人工确认后使用。"));
     }
     String content = callMinimax("""
         你是严谨的 Java 后端面试官和面试教练。请基于上传简历与 JD 生成模拟面试问答。
@@ -204,21 +245,176 @@ public class LlmService {
         strings(json, "riskNotes"));
   }
 
-  public String runAgentWorkflow(String question, String templateId) {
+  public InterviewTurnResponse nextInterviewQuestion(InterviewTurnRequest request) {
+    String role = request.targetRole() == null || request.targetRole().isBlank() ? "Java 后端开发" : request.targetRole().trim();
+    List<String> hints = request.assetHints() == null ? List.of() : request.assetHints();
+    List<InterviewAnswer> history = request.history() == null ? List.of() : request.history();
+    String resumeText = nullToEmpty(request.resumeText()).trim();
+    if (resumeText.isBlank()) {
+      throw ApiException.badRequest("请先上传、粘贴或选择简历，再开始模拟面试。");
+    }
+    if (Boolean.TRUE.equals(request.allowFallback())) {
+      MockInterviewQuestion question = fallbackInterviewQuestions(role, hints)
+          .get(Math.min(Math.max(history.size(), 0), fallbackInterviewQuestions(role, hints).size() - 1));
+      return new InterviewTurnResponse(
+          "local-template",
+          role,
+          history.size() + 1,
+          question.question(),
+          question.intent(),
+          question.followUps(),
+          question.scoreFocus(),
+          history.size() >= 2,
+          List.of("本地辅助问题，仅用于离线演练。"));
+    }
     String content = callMinimax("""
-        你是作品集里的 Agent Workflow 编排助手。请基于用户问题和模板生成一段真实模型回答。
-        要求：
-        1. 明确说明这是一次受约束的工作流回答，只能基于输入问题进行解释。
-        2. 不要声称已经执行真实数据库查询、真实 RAG 检索或真实外部工具。
-        3. 如果需要工具结果才能回答，明确说明缺少工具结果。
-        4. 只能输出中文纯文本，120-240 字；不要 JSON，不要 Markdown，不要代码块，不要 <think>。
-        用户问题：%s
-        工作流模板：%s
-        """.formatted(nullToEmpty(question), nullToEmpty(templateId)));
+        你是严谨的 Java 后端面试官。请生成“下一道”模拟面试问题。
+        只能输出一个严格 JSON 对象，不要 Markdown，不要代码块，不要解释文字，不要 <think>。
+        输入输出契约：
+        1. 只问 1 个问题，不要一次性给多题。
+        2. 问题必须基于简历、JD、资产提示和历史回答，不得编造候选人没有的经历。
+        3. 避免重复历史问题；每轮逐步推进：自我介绍 -> 项目证据 -> 技术深挖 -> 风险补强 -> 反问/总结。
+        4. intent 说明这题考察什么；followUps 给 1-3 个可能追问；scoreFocus 给 2-5 个评分点。
+        5. canFinish 表示当前历史足够生成适配简历和反馈，至少回答 2 题后才可为 true。
+        返回 JSON：{"question":"...","intent":"...","followUps":["..."],"scoreFocus":["..."],"canFinish":false,"notes":["..."]}。
+        目标岗位：%s
+        岗位JD：%s
+        简历文本：%s
+        资产提示：%s
+        历史问答：%s
+        当前轮次：%s
+        """.formatted(
+            role,
+            nullToEmpty(request.jdText()),
+            resumeText,
+            String.join("、", hints),
+            toJson(history),
+            request.round() == null ? history.size() + 1 : request.round()));
+    JsonNode json = extractJson(content);
+    String question = requiredText(json, "question", "模拟面试 question");
+    if (history.stream().map(InterviewAnswer::question).anyMatch(previous -> normalizeCompare(previous).equals(normalizeCompare(question)))) {
+      throw ApiException.upstream("Minimax 已调用，但返回了重复面试问题；本次不生成替代问题。");
+    }
+    return new InterviewTurnResponse(
+        providerName(),
+        role,
+        history.size() + 1,
+        question,
+        requiredText(json, "intent", "模拟面试 intent"),
+        strings(json, "followUps"),
+        requiredStrings(json, "scoreFocus", "模拟面试 scoreFocus"),
+        history.size() >= 2 && json.path("canFinish").asBoolean(false),
+        strings(json, "notes"));
+  }
+
+  public InterviewFinalizeResponse finalizeInterview(InterviewFinalizeRequest request) {
+    String role = request.targetRole() == null || request.targetRole().isBlank() ? "Java 后端开发" : request.targetRole().trim();
+    List<String> hints = request.assetHints() == null ? List.of() : request.assetHints();
+    List<InterviewAnswer> history = request.history() == null ? List.of() : request.history();
+    String resumeText = nullToEmpty(request.resumeText()).trim();
+    if (resumeText.isBlank()) {
+      throw ApiException.badRequest("请先提供简历内容，再生成面试结果。");
+    }
+    if (history.isEmpty()) {
+      throw ApiException.badRequest("请至少完成一轮模拟面试问答，再生成结果。");
+    }
+    if (Boolean.TRUE.equals(request.allowFallback())) {
+      String generated = fallbackGeneratedResume(resumeText, request.jdText(), role, hints);
+      return new InterviewFinalizeResponse(
+          "local-template",
+          role,
+          fallbackSummary(resumeText, role),
+          generated,
+          fallbackKeywords(request.jdText(), hints),
+          List.of("围绕 JD 关键词重排简历内容。", "保留真实项目证据，不扩写无证据经历。"),
+          List.of("回答应继续补充职责边界、量化结果和排障细节。"),
+          List.of("人工确认适配简历，再决定是否写入草稿。"),
+          List.of("本地辅助结果，请人工确认后使用。"),
+          history.size());
+    }
+    String content = callMinimax("""
+        你是候选人的面试复盘与简历优化助手。请基于 JD、原始简历和模拟面试问答生成最终结果包。
+        只能输出一个严格 JSON 对象，不要 Markdown 代码块，不要解释文字，不要 <think>。
+        输入输出契约：
+        1. generatedResumeMarkdown 必须是完整中文 Markdown 简历，可直接投递或保存到草稿。
+        2. 只允许重排、压缩、改写已有真实经历；不得新增简历、JD、问答中不存在的公司、项目、奖项、学校或数字指标。
+        3. 如果岗位要求缺少证据，写入 riskNotes 和 nextActions，不要硬塞进简历正文。
+        4. interviewFeedback 必须基于用户真实回答，指出表达亮点和需要补强的地方。
+        返回 JSON：
+        {
+          "summary":"不超过120字的结果摘要",
+          "generatedResumeMarkdown":"# ...",
+          "highlights":["..."],
+          "resumeSuggestions":["..."],
+          "interviewFeedback":["..."],
+          "nextActions":["..."],
+          "riskNotes":["..."]
+        }
+        目标岗位：%s
+        岗位JD：%s
+        原始简历：%s
+        资产提示：%s
+        模拟面试问答：%s
+        """.formatted(
+            role,
+            nullToEmpty(request.jdText()),
+            resumeText,
+            String.join("、", hints),
+            toJson(history)));
+    JsonNode json = extractJson(content);
+    String generatedResumeMarkdown = requiredText(json, "generatedResumeMarkdown", "面试结果 generatedResumeMarkdown");
+    String source = resumeText + "\n" + nullToEmpty(request.jdText()) + "\n" + String.join("\n", hints) + "\n" + toJson(history);
+    assertNoUnsafeGeneratedText("面试结果 generatedResumeMarkdown", generatedResumeMarkdown, source);
+    return new InterviewFinalizeResponse(
+        providerName(),
+        role,
+        requiredText(json, "summary", "面试结果 summary"),
+        generatedResumeMarkdown,
+        requiredStrings(json, "highlights", "面试结果 highlights"),
+        requiredStrings(json, "resumeSuggestions", "面试结果 resumeSuggestions"),
+        requiredStrings(json, "interviewFeedback", "面试结果 interviewFeedback"),
+        requiredStrings(json, "nextActions", "面试结果 nextActions"),
+        strings(json, "riskNotes"),
+        history.size());
+  }
+
+  public String runAgentWorkflow(String question, String templateId) {
+    return runAgentWorkflow(question, templateId, "");
+  }
+
+  public String runAgentWorkflow(String question, String templateId, String memory) {
+    String content = callMinimax(buildAgentWorkflowPrompt(question, memory));
     if (content.isBlank()) {
       throw ApiException.upstream("Minimax Agent Workflow 返回空内容。");
     }
     return plainAgentAnswer(content);
+  }
+
+  public String streamAgentWorkflow(String question, String templateId, Consumer<String> onDelta) {
+    return streamAgentWorkflow(question, templateId, "", onDelta);
+  }
+
+  public String streamAgentWorkflow(String question, String templateId, String memory, Consumer<String> onDelta) {
+    String content = callMinimaxStream(buildAgentWorkflowPrompt(question, memory), onDelta);
+    if (content.isBlank()) {
+      throw ApiException.upstream("Minimax Agent Workflow 流式返回空内容。");
+    }
+    return plainAgentAnswer(content);
+  }
+
+  private String buildAgentWorkflowPrompt(String question, String memory) {
+    return """
+        你是作品集里的语言助手。请直接回答用户问题，回答应自然、具体、可执行。
+        要求：
+        1. 不要提及工作流模板、rag-question、RAG、工具边界、受约束回答、未接入检索器等实现细节。
+        2. 不要声称已经执行真实数据库查询、真实检索或真实外部工具。
+        3. 如果问题缺少必要背景，可以直接提出 1 个澄清问题。
+        4. 如果会话记忆与当前问题相关，可以自然引用；如果无关，不要强行提及。
+        5. 只能输出中文纯文本，80-220 字；不要 JSON，不要 Markdown，不要代码块，不要 <think>。
+        会话记忆：
+        %s
+        用户问题：%s
+        """.formatted(trimTo(nullToEmpty(memory), 1800), nullToEmpty(question));
   }
 
   public ResumeParsedPayload parseResumeText(String rawText) {
@@ -319,13 +515,17 @@ public class LlmService {
 
   private String callMinimax(String prompt) {
     ensureConfigured();
+    String systemPrompt = "你是作品集知识图谱与简历优化助手。除非用户明确要求自然语言回答，否则输出必须是严格 JSON；不要输出 Markdown 代码块或 <think> 推理文本。";
+    int maxTokens = 5000;
     Map<String, Object> body = Map.of(
         "model", textModel,
         "messages", List.of(
-            Map.of("role", "system", "content", "你是作品集知识图谱与简历优化助手。除非用户明确要求自然语言回答，否则输出必须是严格 JSON；不要输出 Markdown 代码块或 <think> 推理文本。"),
+            Map.of("role", "system", "content", systemPrompt),
             Map.of("role", "user", "content", prompt)),
         "temperature", 0.2,
-        "max_tokens", 5000);
+        "max_tokens", maxTokens);
+    int estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(prompt) + 12;
+    LlmBudgetService.Reservation reservation = budgetService.reserve(estimatedInputTokens, maxTokens);
     String response;
     try {
       response = restClient.post()
@@ -336,18 +536,22 @@ public class LlmService {
           .retrieve()
           .body(String.class);
     } catch (RestClientResponseException exception) {
+      reservation.close();
       throw ApiException.upstream("Minimax HTTP 调用失败：" + exception.getStatusCode() + " " + trimTo(exception.getResponseBodyAsString(), 180));
     } catch (RuntimeException exception) {
+      reservation.close();
       throw ApiException.upstream("Minimax 网络或客户端调用失败：" + trimTo(exception.getMessage(), 180));
     }
     JsonNode root;
     try {
       root = objectMapper.readTree(response);
     } catch (Exception exception) {
+      reservation.close();
       throw ApiException.upstream("Minimax 响应不是合法 JSON：" + trimTo(response, 180));
     }
     JsonNode baseResp = root.path("base_resp");
     if (baseResp.path("status_code").asInt(0) != 0) {
+      reservation.close();
       int statusCode = baseResp.path("status_code").asInt(0);
       String statusMessage = baseResp.path("status_msg").asText("unknown");
       String message = "Minimax API error: " + statusMessage;
@@ -358,9 +562,122 @@ public class LlmService {
     }
     JsonNode content = root.path("choices").path(0).path("message").path("content");
     if (!content.isTextual() || content.asText().isBlank()) {
+      reservation.close();
       throw ApiException.upstream("Minimax 响应缺少 choices[0].message.content。");
     }
-    return stripReasoning(content.asText());
+    String stripped = stripReasoning(content.asText());
+    TokenUsage usage = tokenUsage(root, estimatedInputTokens, estimateTokens(stripped));
+    reservation.complete(usage.inputTokens(), usage.outputTokens());
+    return stripped;
+  }
+
+  private String callMinimaxStream(String prompt, Consumer<String> onDelta) {
+    ensureConfigured();
+    String systemPrompt = "你是作品集语言助手。直接回答用户问题，不暴露工作流、RAG、工具边界或系统实现细节。";
+    int maxTokens = 1200;
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("model", textModel);
+    body.put("messages", List.of(
+        Map.of("role", "system", "content", systemPrompt),
+        Map.of("role", "user", "content", prompt)));
+    body.put("temperature", 0.2);
+    body.put("max_tokens", maxTokens);
+    body.put("stream", true);
+
+    int estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(prompt) + 12;
+    LlmBudgetService.Reservation reservation = budgetService.reserve(estimatedInputTokens, maxTokens);
+    StringBuilder answer = new StringBuilder();
+    try {
+      restClient.post()
+          .uri("/chat/completions")
+          .contentType(MediaType.APPLICATION_JSON)
+          .accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_NDJSON, MediaType.APPLICATION_JSON)
+          .header("Authorization", "Bearer " + apiKey)
+          .body(body)
+          .exchange((request, response) -> {
+            if (response.getStatusCode().isError()) {
+              String responseBody = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
+              throw ApiException.upstream("Minimax 流式 HTTP 调用失败：" + response.getStatusCode() + " " + trimTo(responseBody, 180));
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
+              String line;
+              while ((line = reader.readLine()) != null) {
+                String payload = streamPayload(line);
+                if (payload.isBlank()) {
+                  continue;
+                }
+                if ("[DONE]".equals(payload)) {
+                  break;
+                }
+                String delta = streamDelta(payload);
+                if (delta.isBlank()) {
+                  continue;
+                }
+                String cleaned = stripReasoning(delta);
+                if (cleaned.isBlank()) {
+                  continue;
+                }
+                answer.append(cleaned);
+                onDelta.accept(cleaned);
+              }
+            }
+            return null;
+          });
+    } catch (ApiException exception) {
+      reservation.close();
+      throw exception;
+    } catch (RestClientResponseException exception) {
+      reservation.close();
+      throw ApiException.upstream("Minimax 流式 HTTP 调用失败：" + exception.getStatusCode() + " " + trimTo(exception.getResponseBodyAsString(), 180));
+    } catch (RuntimeException exception) {
+      reservation.close();
+      throw ApiException.upstream("Minimax 流式调用失败：" + trimTo(exception.getMessage(), 180));
+    }
+    String result = stripReasoning(answer.toString()).trim();
+    if (result.isBlank()) {
+      reservation.close();
+      throw ApiException.upstream("Minimax 流式响应没有返回文本增量。");
+    }
+    reservation.complete(estimatedInputTokens, estimateTokens(result));
+    return result;
+  }
+
+  private String streamPayload(String line) {
+    String trimmed = line == null ? "" : line.trim();
+    if (trimmed.isBlank() || trimmed.startsWith(":")) {
+      return "";
+    }
+    if (trimmed.startsWith("data:")) {
+      return trimmed.substring("data:".length()).trim();
+    }
+    return trimmed;
+  }
+
+  private String streamDelta(String payload) {
+    try {
+      JsonNode root = objectMapper.readTree(payload);
+      JsonNode baseResp = root.path("base_resp");
+      if (!baseResp.isMissingNode() && baseResp.path("status_code").asInt(0) != 0) {
+        int statusCode = baseResp.path("status_code").asInt(0);
+        String statusMessage = baseResp.path("status_msg").asText("unknown");
+        String message = "Minimax API error: " + statusMessage;
+        if (statusCode == 2049 || statusMessage.toLowerCase(Locale.ROOT).contains("invalid api key")) {
+          authFailureMessage = message + "。请在 MiniMax Open Platform 的 Account Management > API Keys 重新生成有效 API Key。";
+        }
+        throw ApiException.upstream(message);
+      }
+      JsonNode choice = root.path("choices").path(0);
+      JsonNode delta = choice.path("delta").path("content");
+      if (delta.isTextual()) {
+        return delta.asText();
+      }
+      JsonNode message = choice.path("message").path("content");
+      return message.isTextual() ? message.asText() : "";
+    } catch (ApiException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw ApiException.upstream("Minimax 流式响应片段无法解析：" + trimTo(payload, 160));
+    }
   }
 
   private String buildKnowledgePrompt(KnowledgeGraphNode node, KnowledgeGraphView graph) {
@@ -391,6 +708,8 @@ public class LlmService {
   }
 
   private String buildKnowledgeParentPrompt(KnowledgeGraphNode node, KnowledgeGraphView graph) {
+    Map<String, KnowledgeGraphNode> nodeByKey = new LinkedHashMap<>();
+    graph.nodes().forEach(item -> nodeByKey.put(item.nodeKey(), item));
     List<Map<String, Object>> sectionNodes = graph.nodes().stream()
         .filter(item -> item.level() == 1)
         .map(item -> Map.<String, Object>of(
@@ -401,6 +720,20 @@ public class LlmService {
             "summary", item.summary(),
             "tags", item.tags()))
         .toList();
+    List<Map<String, Object>> existingParentEdges = graph.edges().stream()
+        .filter(edge -> edge.toNodeKey().equals(node.nodeKey()))
+        .filter(edge -> Set.of("INCLUDES", "CONTAINS").contains(edge.relationType()))
+        .filter(edge -> {
+          KnowledgeGraphNode from = nodeByKey.get(edge.fromNodeKey());
+          KnowledgeGraphNode to = nodeByKey.get(edge.toNodeKey());
+          return from != null && to != null && from.level() == 1 && to.level() == 2;
+        })
+        .map(edge -> Map.<String, Object>of(
+            "fromNodeKey", edge.fromNodeKey(),
+            "toNodeKey", edge.toNodeKey(),
+            "relationType", edge.relationType(),
+            "visible", edge.visible()))
+        .toList();
     return """
         请只为当前三级知识图谱节点选择最合理的二级栏目归属边。
         这是全图编排任务，一级个人节点与二级栏目之间的关系已经确定，不要输出 CORE、me、OWNS，也不要输出三级节点之间的证据边。
@@ -408,13 +741,71 @@ public class LlmService {
         1. 当前节点必须是 level 2；只能从 sectionNodes 中选择 level 1 栏目作为 fromNodeKey。
         2. 输出方向必须是 二级栏目 -> 当前三级节点，即 fromNodeKey 为 sectionNodes 的 nodeKey，toNodeKey 为 currentNode.nodeKey。
         3. BLOG 归属技术博客时用 CONTAINS；SKILL/PROJECT/MODULE 归属履历、项目证据、面试助手等栏目时用 INCLUDES。
-        4. 最多返回 1-2 条；没有明确归属时返回空数组，不要为了图谱好看造边。
-        5. 禁止跨级连接，禁止输出 level2 -> level0、level0 -> level1、level2 -> level2。
+        4. 可以返回多个强相关二级栏目，但不要超过 sectionNodes 数量；如果 existingParentEdges 已经有某个 fromNodeKey，不要重复返回这条边，只补充缺失且合理的二级栏目。
+        5. 如果当前节点已经有合理归属，也可以继续补充其他强相关栏目；如果没有明确新增归属，返回空数组，不要为了图谱好看造边。
+        6. 禁止跨级连接，禁止输出 level2 -> level0、level0 -> level1、level2 -> level2。
         输出契约：返回严格 JSON 数组，不要 Markdown，不要解释文字，不要 <think>。
         JSON schema: [{"fromNodeKey":"section node key","toNodeKey":"current node key","relationType":"INCLUDES|CONTAINS","reason":"不超过60字的依据"}]。
         currentNode: %s
         sectionNodes: %s
-        """.formatted(toJson(node), toJson(sectionNodes));
+        existingParentEdges: %s
+        """.formatted(toJson(node), toJson(sectionNodes), toJson(existingParentEdges));
+  }
+
+  private String buildKnowledgeOrchestratePrompt(KnowledgeGraphNode node, KnowledgeGraphView graph) {
+    Map<String, KnowledgeGraphNode> nodeByKey = new LinkedHashMap<>();
+    graph.nodes().forEach(item -> nodeByKey.put(item.nodeKey(), item));
+    List<Map<String, Object>> sectionNodes = graph.nodes().stream()
+        .filter(item -> item.level() == 1)
+        .map(item -> Map.<String, Object>of(
+            "nodeKey", item.nodeKey(),
+            "label", item.label(),
+            "nodeType", item.nodeType(),
+            "level", item.level(),
+            "summary", item.summary(),
+            "tags", item.tags()))
+        .toList();
+    List<Map<String, Object>> tertiaryNodes = graph.nodes().stream()
+        .filter(item -> item.level() == 2)
+        .filter(item -> !item.nodeKey().equals(node.nodeKey()))
+        .map(item -> Map.<String, Object>of(
+            "nodeKey", item.nodeKey(),
+            "label", item.label(),
+            "nodeType", item.nodeType(),
+            "level", item.level(),
+            "summary", item.summary(),
+            "tags", item.tags()))
+        .toList();
+    List<Map<String, Object>> existingEdges = graph.edges().stream()
+        .filter(edge -> edge.fromNodeKey().equals(node.nodeKey()) || edge.toNodeKey().equals(node.nodeKey()))
+        .filter(edge -> {
+          KnowledgeGraphNode from = nodeByKey.get(edge.fromNodeKey());
+          KnowledgeGraphNode to = nodeByKey.get(edge.toNodeKey());
+          return from != null && to != null;
+        })
+        .map(edge -> Map.<String, Object>of(
+            "fromNodeKey", edge.fromNodeKey(),
+            "toNodeKey", edge.toNodeKey(),
+            "relationType", edge.relationType(),
+            "visible", edge.visible()))
+        .toList();
+    return """
+        请为当前三级知识图谱节点补齐“必要关系”，只能连接到 sectionNodes 或 tertiaryNodes 中存在的节点。
+        这是全图编排任务，一级个人节点与二级栏目之间的关系已经确定，不要输出 CORE、me、OWNS。
+        输入输出契约：
+        1. 当前节点必须是 level 2；每条关系必须直接包含 currentNode，不要替其它两个节点新建关系。
+        2. 归属边：只能是 二级栏目 -> 当前三级节点；fromNodeKey 来自 sectionNodes，toNodeKey 为 currentNode.nodeKey；BLOG 用 CONTAINS，其它三级内容用 INCLUDES。
+        3. 证据边：只能是三级内容节点之间；PROJECT/MODULE -> SKILL 用 USES；BLOG -> SKILL/PROJECT/MODULE 用 EXPLAINS；只有标签、摘要或内容有明确重合时才用 RELATED。
+        4. 可以同时返回归属边和证据边；不要重复 existingEdges 里已有的 fromNodeKey/toNodeKey/relationType。
+        5. 没有明确新增关系时返回空数组，不要为了图谱好看造边。
+        6. 禁止跨级连接，禁止输出 level2 -> level0、level0 -> level1、SECTION -> SECTION、level2 -> SECTION。
+        输出契约：返回严格 JSON 数组，不要 Markdown，不要解释文字，不要 <think>。
+        JSON schema: [{"fromNodeKey":"node key","toNodeKey":"node key","relationType":"INCLUDES|CONTAINS|USES|EXPLAINS|RELATED","reason":"不超过60字的依据"}]。
+        currentNode: %s
+        sectionNodes: %s
+        tertiaryNodes: %s
+        existingEdges: %s
+        """.formatted(toJson(node), toJson(sectionNodes), toJson(tertiaryNodes), toJson(existingEdges));
   }
 
   private List<KnowledgeRelationSuggestion> parseRelationSuggestions(String content) {
@@ -448,7 +839,7 @@ public class LlmService {
             allowedRelation(item.relationType()),
             nullToEmpty(item.reason())))
         .filter(item -> touchesNode(item, node.nodeKey()))
-        .limit(3)
+        .limit(8)
         .toList();
   }
 
@@ -649,7 +1040,7 @@ public class LlmService {
         %s
 
         ## 投递前人工确认
-        - 本草案来自用户显式触发的规则兜底，不是模型输出。
+        - 本草案来自本地辅助模板，请人工确认后使用。
         - 已保留原始简历证据，请人工补充真实量化指标、项目职责边界和可验证链接。
         - JD 中没有简历证据支撑的要求，不应写入正式简历正文。
         """.formatted(
@@ -704,7 +1095,7 @@ public class LlmService {
     questions.add(new MockInterviewQuestion(
         "请展开讲一下 " + asset + "，你负责了什么，难点在哪里？",
         "验证项目职责边界、技术选型和问题拆解能力。",
-        "我会按背景、职责、方案、结果来讲。背景是项目中存在一个明确业务问题；我负责其中的后端模块实现和联调。难点不只是写接口，而是要考虑数据状态、缓存与数据库之间的一致性，以及异常情况下的兜底。方案上我会先保证核心链路可观测，再把高频读写放到合适的位置优化。结果部分我会只说简历中真实可验证的指标或现象，没有数据的地方会说明是体验或稳定性改善。",
+        "我会按背景、职责、方案、结果来讲。背景是项目中存在一个明确业务问题；我负责其中的后端模块实现和联调。难点不只是写接口，而是要考虑数据状态、缓存与数据库之间的一致性，以及异常情况下的处理方案。方案上我会先保证核心链路可观测，再把高频读写放到合适的位置优化。结果部分我会只说简历中真实可验证的指标或现象，没有数据的地方会说明是体验或稳定性改善。",
         List.of("这个方案有没有替代选型？", "你负责的代码边界具体到哪些接口或表？"),
         List.of("职责边界", "技术取舍", "业务结果", "可验证细节")));
     questions.add(new MockInterviewQuestion(
@@ -716,8 +1107,8 @@ public class LlmService {
     questions.add(new MockInterviewQuestion(
         "JD 提到 AI/RAG 加分项时，你会怎样把自己的项目讲得可信？",
         "验证候选人能否处理加分项和证据不足的边界。",
-        "我会明确区分已经落地的工程能力和正在学习验证的 AI 能力。如果项目里只是做了 Agent Workflow 或 RAG Demo，我会说清楚输入输出契约、工具边界、失败兜底和日志观测，而不会声称做过真实线上大规模 RAG。这样既能展示我对 AI 工程化的理解，也不会突破简历真实性边界。",
-        List.of("RAG 和普通关键词检索有什么区别？", "LLM 接口失败时产品应该如何降级？"),
+        "我会明确区分已经落地的工程能力和正在学习验证的 AI 能力。如果项目里只是做了 Agent Workflow 或 RAG Demo，我会说清楚输入输出契约、工具边界、失败处理和日志观测，而不会声称做过真实线上大规模 RAG。这样既能展示我对 AI 工程化的理解，也不会突破简历真实性边界。",
+        List.of("RAG 和普通关键词检索有什么区别？", "LLM 接口不可用时产品应该如何处理？"),
         List.of("边界意识", "工程化理解", "失败处理", "真实性")));
     questions.add(new MockInterviewQuestion(
         "请说一个你项目中做过的优化点，为什么它是必要的？",
@@ -787,6 +1178,10 @@ public class LlmService {
     return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
   }
 
+  private String normalizeCompare(String value) {
+    return nullToEmpty(value).replaceAll("\\s+", "").trim();
+  }
+
   private void ensureConfigured() {
     if (!configured()) {
       throw ApiException.serviceUnavailable("未配置 MINIMAX_API_KEY，AI 接口不会生成替代结果或返回假数据。");
@@ -837,6 +1232,52 @@ public class LlmService {
     return normalized;
   }
 
+  private TokenUsage tokenUsage(JsonNode root, int fallbackInputTokens, int fallbackOutputTokens) {
+    JsonNode usage = root.path("usage");
+    int inputTokens = firstPositiveInt(
+        usage.path("prompt_tokens").asInt(0),
+        usage.path("input_tokens").asInt(0),
+        usage.path("total_input_tokens").asInt(0),
+        fallbackInputTokens);
+    int outputTokens = firstPositiveInt(
+        usage.path("completion_tokens").asInt(0),
+        usage.path("output_tokens").asInt(0),
+        usage.path("total_output_tokens").asInt(0),
+        fallbackOutputTokens);
+    int totalTokens = usage.path("total_tokens").asInt(0);
+    if (totalTokens > 0 && outputTokens <= 0 && inputTokens > 0 && totalTokens > inputTokens) {
+      outputTokens = totalTokens - inputTokens;
+    }
+    return new TokenUsage(inputTokens, outputTokens);
+  }
+
+  private int estimateTokens(String value) {
+    String normalized = value == null ? "" : value.trim();
+    if (normalized.isBlank()) {
+      return 0;
+    }
+    int cjk = 0;
+    int ascii = 0;
+    for (int i = 0; i < normalized.length(); i++) {
+      char ch = normalized.charAt(i);
+      if (Character.UnicodeScript.of(ch) == Character.UnicodeScript.HAN) {
+        cjk++;
+      } else if (!Character.isWhitespace(ch)) {
+        ascii++;
+      }
+    }
+    return Math.max(1, cjk + (int) Math.ceil(ascii / 4.0));
+  }
+
+  private int firstPositiveInt(int... values) {
+    for (int value : values) {
+      if (value > 0) {
+        return value;
+      }
+    }
+    return 0;
+  }
+
   private String stripReasoning(String value) {
     if (value == null || value.isBlank()) {
       return "";
@@ -854,6 +1295,10 @@ public class LlmService {
 
   private enum RelationTask {
     FULL,
-    TERTIARY_PARENT_ONLY
+    TERTIARY_PARENT_ONLY,
+    TERTIARY_ORCHESTRATE
+  }
+
+  private record TokenUsage(int inputTokens, int outputTokens) {
   }
 }

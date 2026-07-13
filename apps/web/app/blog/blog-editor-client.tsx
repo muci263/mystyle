@@ -1,12 +1,32 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, Upload } from "lucide-react";
 import { apiPost, apiPut } from "@/lib/api";
 import type { BlogCategory, BlogPost } from "@/lib/api";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 
-const starterContent = "这里写技术总结正文。\n\n建议按照：背景问题、技术方案、实现细节、踩坑复盘、面试可讲点来组织。";
+const starterContent = `# 技术总结标题
+
+## 背景问题
+
+这里写清楚问题发生的业务场景和约束。
+
+## 技术方案
+
+- 方案一：说明核心设计。
+- 方案二：说明边界和取舍。
+
+## 实现细节
+
+\`\`\`java
+// 关键代码或伪代码
+\`\`\`
+
+## 复盘
+
+总结踩坑、优化结果和面试可讲点。`;
 
 type BlogEditorClientProps = {
   categories: BlogCategory[];
@@ -59,6 +79,38 @@ export function BlogEditorClient({ categories, mode = "create", post }: BlogEdit
     }
   }
 
+  async function importMarkdown(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setError("");
+    try {
+      if (!file.name.toLowerCase().endsWith(".md") && !file.name.toLowerCase().endsWith(".markdown")) {
+        setError("请上传 .md 或 .markdown 文件。");
+        return;
+      }
+      const text = await file.text();
+      setContent(text);
+      const firstHeading = text.match(/^#\s+(.+)$/m)?.[1]?.trim();
+      if (!title.trim() && firstHeading) {
+        setTitle(firstHeading);
+      }
+      if (!excerpt.trim()) {
+        const firstParagraph = text
+          .replace(/^---[\s\S]*?---\s*/m, "")
+          .split(/\n\s*\n/)
+          .map((item) => item.trim())
+          .find((item) => item && !item.startsWith("#") && !item.startsWith("```"));
+        if (firstParagraph) {
+          setExcerpt(firstParagraph.replace(/^[-*]\s+/, "").slice(0, 220));
+        }
+      }
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Markdown 文件读取失败");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   return (
     <form onSubmit={submit} className="mt-10 grid gap-5">
       <div className="grid gap-5 md:grid-cols-[1fr_220px]">
@@ -100,15 +152,28 @@ export function BlogEditorClient({ categories, mode = "create", post }: BlogEdit
         />
       </label>
 
-      <label className="block">
-        <span className="text-sm font-medium text-ink">正文</span>
-        <textarea
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          className="mt-2 min-h-80 w-full resize-y border border-line bg-stonepaper px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-accent"
-          required
-        />
-      </label>
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm font-medium text-ink">正文 Markdown</span>
+          <label className="secondary-action inline-flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium">
+            <Upload size={15} />
+            导入 .md
+            <input type="file" accept=".md,.markdown,text/markdown,text/plain" className="sr-only" onChange={importMarkdown} />
+          </label>
+        </div>
+        <div className="mt-2 grid gap-4 lg:grid-cols-2">
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            className="min-h-[32rem] w-full resize-y border border-line bg-stonepaper px-4 py-3 font-mono text-sm leading-7 text-ink outline-none focus:border-accent"
+            required
+          />
+          <div className="min-h-[32rem] overflow-auto border border-line bg-white p-5">
+            <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.2em] text-accent">Preview</p>
+            <MarkdownRenderer content={content} />
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-5 md:grid-cols-[1fr_180px]">
         <label className="block">

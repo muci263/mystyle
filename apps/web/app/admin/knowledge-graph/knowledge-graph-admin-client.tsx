@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Loader2, Network, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { LlmProgressPanel, useLlmProgress } from "@/components/llm-progress";
+import { AdminWorktop } from "@/components/site-shell";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import type {
   KnowledgeGraphEdge,
@@ -115,7 +116,6 @@ export function KnowledgeGraphAdminClient({
   const nodeFormRef = useRef<HTMLFormElement>(null);
   const edgeFormRef = useRef<HTMLFormElement>(null);
   const appliedInitialNodeRef = useRef(false);
-  const nodeFallbackSubmitRef = useRef(false);
 
   const levelCounts = useMemo(() => ({
     core: nodes.filter((node) => node.level === 0).length,
@@ -156,8 +156,6 @@ export function KnowledgeGraphAdminClient({
 
   async function saveNode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const allowFallback = nodeFallbackSubmitRef.current;
-    nodeFallbackSubmitRef.current = false;
     await run("node", async () => {
       const payload = nodePayload(nodeForm);
       if (editingNodeKey) {
@@ -166,9 +164,9 @@ export function KnowledgeGraphAdminClient({
       } else {
         llmProgress.start("智能新增节点", graphLlmSteps);
         llmProgress.setStep("contract", "done", "已约定 nodeKey、nodeType、level、候选关系 JSON schema。");
-        llmProgress.activate("request", allowFallback ? "用户已确认使用规则降级，本次不调用 Minimax。" : "Minimax 正在生成不跨级的候选关系。");
+        llmProgress.activate("request", "Minimax 正在生成不跨级的候选关系。");
         const response = await apiPost<KnowledgeGraphAutoRelateResponse>(
-          `/admin/knowledge-graph/nodes/smart-create${allowFallback ? "?allowFallback=true" : ""}`,
+          "/admin/knowledge-graph/nodes/smart-create",
           smartNodePayload(nodeForm),
         );
         llmProgress.activate("guard", "后端正在执行层级、方向、重复边和可见性规则。");
@@ -217,19 +215,14 @@ export function KnowledgeGraphAdminClient({
     });
   }
 
-  async function submitNodeWithFallback() {
-    nodeFallbackSubmitRef.current = true;
-    nodeFormRef.current?.requestSubmit();
-  }
-
-  async function autoRelateNode(nodeKey: string, allowFallback = false) {
+  async function autoRelateNode(nodeKey: string) {
     await run(`auto-relate-${nodeKey}`, async () => {
       const node = nodes.find((item) => item.nodeKey === nodeKey);
-      llmProgress.start(`${allowFallback ? "规则兜底建边" : "AI 建边"} / ${node?.label ?? nodeKey}`, graphLlmSteps);
+      llmProgress.start(`AI 建边 / ${node?.label ?? nodeKey}`, graphLlmSteps);
       llmProgress.setStep("contract", "done", "已锁定当前节点，只允许生成包含该节点的关系。");
-      llmProgress.activate("request", allowFallback ? "用户已确认使用规则降级，本次不调用 Minimax。" : "Minimax 正在按层级契约生成候选边。");
+      llmProgress.activate("request", "Minimax 正在按层级契约生成候选边。");
       const response = await apiPost<KnowledgeGraphAutoRelateResponse>(
-        `/admin/knowledge-graph/nodes/${nodeKey}/auto-relate${allowFallback ? "?allowFallback=true" : ""}`,
+        `/admin/knowledge-graph/nodes/${nodeKey}/auto-relate`,
       );
       llmProgress.activate("guard", "正在过滤跨级连接和不合理证据边。");
       llmProgress.setStep("guard", "done", response.notes.slice(0, 2).join(" "));
@@ -240,17 +233,17 @@ export function KnowledgeGraphAdminClient({
     }, llmProgress.fail);
   }
 
-  async function orchestrateGraph(allowFallback = false) {
-    await run(allowFallback ? "orchestrate-fallback" : "orchestrate", async () => {
-      llmProgress.start(allowFallback ? "全图规则兜底候选边" : "全图 AI 编排候选边", [
-        { id: "contract", label: "编排契约", detail: "只处理三级节点与二级栏目之间的归属边。" },
-        { id: "request", label: "并行推理", detail: "并发调用 Minimax，判断三级节点应归属哪些二级栏目。" },
-        { id: "guard", label: "批量过滤", detail: "拒绝一级固定边、跨级边、重复边和三级证据边。" },
+  async function orchestrateGraph() {
+    await run("orchestrate", async () => {
+      llmProgress.start("全图 AI 编排候选边", [
+        { id: "contract", label: "编排契约", detail: "处理二级归属边与三级证据边。" },
+        { id: "request", label: "并行推理", detail: "并发调用 Minimax，判断三级节点的栏目归属和证据关联。" },
+        { id: "guard", label: "批量过滤", detail: "拒绝一级固定边、跨级边、重复边和无证据关系。" },
         { id: "refresh", label: "刷新 CMS", detail: "同步新增的隐藏候选边。" },
       ]);
-      llmProgress.setStep("contract", "done", "一级到二级不参与 LLM；每个三级节点最多新增 2 条二级归属边。");
-      llmProgress.activate("request", allowFallback ? "用户已确认使用规则降级，本次不调用 Minimax。" : "Minimax 正在并行处理缺少二级归属的三级节点。");
-      const response = await apiPost<KnowledgeGraphOrchestrateResponse>(`/admin/knowledge-graph/orchestrate${allowFallback ? "?allowFallback=true" : ""}`);
+      llmProgress.setStep("contract", "done", "一级到二级不参与 LLM；三级节点可补栏目归属，也可补三级证据关系。");
+      llmProgress.activate("request", "Minimax 正在并行扫描全图三级节点并补充缺失关系。");
+      const response = await apiPost<KnowledgeGraphOrchestrateResponse>("/admin/knowledge-graph/orchestrate");
       llmProgress.activate("guard", "后端正在汇总过滤结果。");
       llmProgress.setStep("guard", "done", response.notes.join(" "));
       llmProgress.activate("refresh", "正在刷新 CMS 数据。");
@@ -350,17 +343,13 @@ export function KnowledgeGraphAdminClient({
   return (
     <section className="graph-admin-page">
       <div className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
-        <div className="graph-admin-hero">
-          <div>
-            <p className="eyebrow">Knowledge Graph CMS</p>
-            <h1 className="display mt-6 text-5xl leading-[1.02] md:text-7xl">首页图谱管理</h1>
-          </div>
+        <AdminWorktop eyebrow="Knowledge Graph CMS" title="首页图谱管理">
           <div className="admin-status-grid">
             <StatusTile label="一级个人" value={`${levelCounts.core}`} />
             <StatusTile label="二级栏目" value={`${levelCounts.section}`} />
             <StatusTile label="三级内容" value={`${levelCounts.content}`} />
           </div>
-        </div>
+        </AdminWorktop>
 
         {(notice || error) ? (
           <div className={`admin-message ${error ? "is-error" : ""}`}>{error || notice}</div>
@@ -371,10 +360,10 @@ export function KnowledgeGraphAdminClient({
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
             <button type="button" className={`admin-tab ${mode === "nodes" ? "is-active" : ""}`} onClick={() => setMode("nodes")}>
-              节点 CRUD
+              节点管理
             </button>
             <button type="button" className={`admin-tab ${mode === "edges" ? "is-active" : ""}`} onClick={() => setMode("edges")}>
-              关系 CRUD
+              关系管理
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -397,21 +386,12 @@ export function KnowledgeGraphAdminClient({
             </button>
             <button
               type="button"
-              onClick={() => orchestrateGraph(false)}
+              onClick={orchestrateGraph}
               className="secondary-action px-4 py-2 text-sm"
               disabled={busy === "orchestrate"}
             >
               {busy === "orchestrate" ? <Loader2 className="animate-spin" size={16} /> : <Network size={16} />}
-              AI 编排候选边
-            </button>
-            <button
-              type="button"
-              onClick={() => orchestrateGraph(true)}
-              className="secondary-action px-4 py-2 text-sm"
-              disabled={busy === "orchestrate-fallback"}
-            >
-              {busy === "orchestrate-fallback" ? <Loader2 className="animate-spin" size={16} /> : <Network size={16} />}
-              规则兜底编排
+              智能编排关系
             </button>
           </div>
         </div>
@@ -423,7 +403,6 @@ export function KnowledgeGraphAdminClient({
                 title={editingNodeKey ? "编辑节点" : "新增节点"}
                 busy={busy === "node"}
                 onCancel={editingNodeKey ? cancelNodeEditing : undefined}
-                onFallback={!editingNodeKey ? submitNodeWithFallback : undefined}
               />
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <TextField label="标题" value={nodeForm.label} onChange={(value) => setNodeForm({ ...nodeForm, label: value })} required />
@@ -485,11 +464,8 @@ export function KnowledgeGraphAdminClient({
                             <p className="mt-2 text-xs leading-5 text-graphite">{node.nodeKey} / {levelLabel(node.level)}</p>
                           </div>
                           <div className="flex shrink-0 gap-2">
-                            <button type="button" className="admin-link-button" onClick={() => autoRelateNode(node.nodeKey, false)} disabled={busy === `auto-relate-${node.nodeKey}`}>
+                            <button type="button" className="admin-link-button" onClick={() => autoRelateNode(node.nodeKey)} disabled={busy === `auto-relate-${node.nodeKey}`}>
                               {busy === `auto-relate-${node.nodeKey}` ? "生成中" : "AI 建边"}
-                            </button>
-                            <button type="button" className="admin-link-button" onClick={() => autoRelateNode(node.nodeKey, true)} disabled={busy === `auto-relate-${node.nodeKey}`}>
-                              规则建边
                             </button>
                             <button type="button" className="admin-link-button" onClick={() => startNodeEditing(node)}>编辑</button>
                             <button type="button" className="admin-danger-button" onClick={() => deleteNode(node.nodeKey)} disabled={busy === `delete-node-${node.nodeKey}`}>
@@ -568,12 +544,10 @@ function FormHeader({
   title,
   busy,
   onCancel,
-  onFallback,
 }: {
   title: string;
   busy: boolean;
   onCancel?: () => void;
-  onFallback?: () => void;
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
@@ -584,11 +558,6 @@ function FormHeader({
       <div className="flex gap-2">
         {onCancel ? (
           <button type="button" className="secondary-action px-4 py-3 text-sm" onClick={onCancel}>取消</button>
-        ) : null}
-        {onFallback ? (
-          <button type="button" className="secondary-action px-4 py-3 text-sm" onClick={onFallback} disabled={busy}>
-            规则兜底新增
-          </button>
         ) : null}
         <button disabled={busy} className="primary-action px-5 py-3 text-sm font-medium disabled:opacity-55">
           {busy ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}

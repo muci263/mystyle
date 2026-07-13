@@ -4,10 +4,11 @@ import { FormEvent, SyntheticEvent, useMemo, useRef, useState } from "react";
 import { Check, Loader2, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
 import { apiDelete, apiPost, apiPut } from "@/lib/api";
 import type { BlogAnnotation, BlogInteractionSummary } from "@/lib/api";
+import { parseMarkdownBlocks, renderMarkdownInline } from "@/components/markdown-renderer";
 
 type BlogArticleBodyClientProps = {
   slug: string;
-  paragraphs: string[];
+  content: string;
   initialAnnotations: BlogAnnotation[];
 };
 
@@ -22,7 +23,7 @@ type TextSegment = {
   annotations: BlogAnnotation[];
 };
 
-export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: BlogArticleBodyClientProps) {
+export function BlogArticleBodyClient({ slug, content, initialAnnotations }: BlogArticleBodyClientProps) {
   const bodyRef = useRef<HTMLElement>(null);
   const [annotations, setAnnotations] = useState(initialAnnotations);
   const [draft, setDraft] = useState<SelectionDraft | null>(null);
@@ -34,6 +35,7 @@ export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: 
   const [error, setError] = useState("");
 
   const annotationGroups = useMemo(() => groupAnnotations(annotations), [annotations]);
+  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
 
   function captureSelection(event: SyntheticEvent<HTMLElement>) {
     const root = bodyRef.current;
@@ -158,33 +160,63 @@ export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: 
         </span>
       </div>
 
-      <div className="space-y-7">
-        {paragraphs.map((paragraph, index) => (
-          <p key={`${paragraph.slice(0, 18)}-${index}`} className="text-base leading-9 text-graphite md:text-lg">
-            {annotateText(paragraph, annotationGroups).map((segment, segmentIndex) => (
-              segment.annotations.length > 0 ? (
-                <AnnotatedText
-                  key={`${segment.text}-${segmentIndex}`}
-                  text={segment.text}
-                  annotations={segment.annotations}
-                  editingId={editingId}
-                  editingNote={editingNote}
-                  pendingAction={pendingAction}
-                  onStartEditing={startEditing}
-                  onCancelEditing={() => {
-                    setEditingId(null);
-                    setEditingNote("");
-                  }}
-                  onEditingNoteChange={setEditingNote}
-                  onUpdate={updateAnnotation}
-                  onDelete={deleteAnnotation}
-                />
-              ) : (
-                <span key={`${segment.text}-${segmentIndex}`}>{segment.text}</span>
-              )
-            ))}
-          </p>
-        ))}
+      <div className="markdown-body">
+        {blocks.map((block, index) => {
+          if (block.type === "heading") {
+            const Heading = block.depth <= 2 ? "h2" : block.depth === 3 ? "h3" : "h4";
+            return (
+              <Heading key={`${block.text}-${index}`}>
+                {renderAnnotatedSegments(block.text, annotationGroups, editingId, editingNote, pendingAction, startEditing, setEditingNote, updateAnnotation, deleteAnnotation, () => {
+                  setEditingId(null);
+                  setEditingNote("");
+                })}
+              </Heading>
+            );
+          }
+          if (block.type === "quote") {
+            return (
+              <blockquote key={`${block.text}-${index}`}>
+                {renderAnnotatedSegments(block.text, annotationGroups, editingId, editingNote, pendingAction, startEditing, setEditingNote, updateAnnotation, deleteAnnotation, () => {
+                  setEditingId(null);
+                  setEditingNote("");
+                })}
+              </blockquote>
+            );
+          }
+          if (block.type === "list") {
+            const List = block.ordered ? "ol" : "ul";
+            return (
+              <List key={index}>
+                {block.items.map((item, itemIndex) => (
+                  <li key={`${item}-${itemIndex}`}>
+                    {renderAnnotatedSegments(item, annotationGroups, editingId, editingNote, pendingAction, startEditing, setEditingNote, updateAnnotation, deleteAnnotation, () => {
+                      setEditingId(null);
+                      setEditingNote("");
+                    })}
+                  </li>
+                ))}
+              </List>
+            );
+          }
+          if (block.type === "code") {
+            return (
+              <pre key={index}>
+                <code>{block.code}</code>
+              </pre>
+            );
+          }
+          if (block.type === "rule") {
+            return <hr key={index} />;
+          }
+          return (
+            <p key={`${block.text}-${index}`}>
+              {renderAnnotatedSegments(block.text, annotationGroups, editingId, editingNote, pendingAction, startEditing, setEditingNote, updateAnnotation, deleteAnnotation, () => {
+                setEditingId(null);
+                setEditingNote("");
+              })}
+            </p>
+          );
+        })}
       </div>
 
       {draft ? (
@@ -220,6 +252,39 @@ export function BlogArticleBodyClient({ slug, paragraphs, initialAnnotations }: 
   );
 }
 
+function renderAnnotatedSegments(
+  text: string,
+  annotationGroups: Record<string, BlogAnnotation[]>,
+  editingId: number | null,
+  editingNote: string,
+  pendingAction: string,
+  onStartEditing: (annotation: BlogAnnotation) => void,
+  onEditingNoteChange: (value: string) => void,
+  onUpdate: (annotation: BlogAnnotation) => void,
+  onDelete: (annotationId: number) => void,
+  onCancelEditing: () => void,
+) {
+  return annotateText(text, annotationGroups).map((segment, segmentIndex) => (
+    segment.annotations.length > 0 ? (
+      <AnnotatedText
+        key={`${segment.text}-${segmentIndex}`}
+        text={segment.text}
+        annotations={segment.annotations}
+        editingId={editingId}
+        editingNote={editingNote}
+        pendingAction={pendingAction}
+        onStartEditing={onStartEditing}
+        onCancelEditing={onCancelEditing}
+        onEditingNoteChange={onEditingNoteChange}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+      />
+    ) : (
+      <span key={`${segment.text}-${segmentIndex}`}>{renderMarkdownInline(segment.text)}</span>
+    )
+  ));
+}
+
 function AnnotatedText({
   text,
   annotations,
@@ -245,7 +310,7 @@ function AnnotatedText({
 }) {
   return (
     <span className="annotated-text" tabIndex={0}>
-      {text}
+      {renderMarkdownInline(text)}
       <span className="annotation-tooltip" role="note">
         {annotations.map((annotation) => (
           <span key={annotation.id} className="annotation-tooltip-item">

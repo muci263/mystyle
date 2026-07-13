@@ -1,6 +1,6 @@
 "use client";
 
-import { Line, OrbitControls, Stars, Text } from "@react-three/drei";
+import { Billboard, Line, OrbitControls, Stars, Text } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -288,17 +288,19 @@ function KnowledgeGraphMesh({
               />
             </mesh>
             {showLabel ? (
-              <Text
-                position={[0, radius + 0.24, 0]}
-                fontSize={node.visualType === "core" ? 0.26 : node.level <= 1 ? 0.16 : 0.125}
-                color={highlighted ? "#ffffff" : "#8b9bb6"}
-                anchorX="center"
-                anchorY="middle"
-                maxWidth={node.level <= 1 ? 2.2 : 1.45}
-                textAlign="center"
-              >
-                {node.label}
-              </Text>
+              <Billboard position={[0, radius + 0.24, 0]} follow>
+                <Text
+                  position={[0, 0, 0]}
+                  fontSize={node.visualType === "core" ? 0.26 : node.level <= 1 ? 0.16 : 0.125}
+                  color={highlighted ? "#ffffff" : "#8b9bb6"}
+                  anchorX="center"
+                  anchorY="middle"
+                  maxWidth={node.level <= 1 ? 2.2 : 1.45}
+                  textAlign="center"
+                >
+                  {node.label}
+                </Text>
+              </Billboard>
             ) : null}
           </group>
         );

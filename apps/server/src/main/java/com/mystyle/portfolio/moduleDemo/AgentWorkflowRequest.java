@@ -4,5 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 
 public record AgentWorkflowRequest(
     @NotBlank String question,
-    String templateId) {
+    String templateId,
+    String memory) {
 }

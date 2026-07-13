@@ -25,9 +25,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class KnowledgeGraphSmartService {
   private static final int MAX_EDGES_PER_NODE = 3;
-  private static final int MAX_PARENT_EDGES_PER_NODE = 2;
+  private static final int MAX_ORCHESTRATE_EVIDENCE_EDGES_PER_NODE = 3;
   private static final int MAX_ORCHESTRATE_CREATED_EDGES = 24;
-  private static final int MAX_ORCHESTRATE_LLM_NODES = 8;
+  private static final int MAX_ORCHESTRATE_LLM_NODES = 32;
   private static final int MAX_ORCHESTRATE_PARALLELISM = 4;
 
   private final PortfolioContentService contentService;
@@ -74,7 +74,6 @@ public class KnowledgeGraphSmartService {
     List<KnowledgeGraphNode> candidates = graph.nodes().stream()
         .filter(node -> node.level() == 2)
         .filter(node -> KnowledgeGraphHierarchy.isTertiary(node.nodeType()))
-        .filter(node -> parentEdgeCountByNode.getOrDefault(node.nodeKey(), 0L) == 0)
         .sorted((left, right) -> {
           int edgeCountCompare = Long.compare(
               parentEdgeCountByNode.getOrDefault(left.nodeKey(), 0L),
@@ -86,7 +85,7 @@ public class KnowledgeGraphSmartService {
         .limit(MAX_ORCHESTRATE_LLM_NODES)
         .toList();
     List<RelationDraft> drafts = allowFallback
-        ? nodes.stream().map(node -> fallbackDraft(node, graph, RelationScope.TERTIARY_PARENT_ONLY)).toList()
+        ? nodes.stream().map(node -> fallbackDraft(node, graph, RelationScope.TERTIARY_ORCHESTRATE)).toList()
         : proposeRelationsInParallel(graph, nodes);
     List<KnowledgeGraphAutoRelateResponse> results = new ArrayList<>();
     int createdCount = 0;
@@ -94,25 +93,25 @@ public class KnowledgeGraphSmartService {
       if (createdCount >= MAX_ORCHESTRATE_CREATED_EDGES) {
         break;
       }
-      KnowledgeGraphAutoRelateResponse response = saveDraft(draft, MAX_PARENT_EDGES_PER_NODE);
+      KnowledgeGraphAutoRelateResponse response = saveDraft(draft, suggestionLimit(graph, draft.scope()));
       results.add(response);
       createdCount += response.createdEdges().size();
     }
     List<String> notes = new ArrayList<>();
-    notes.add("已筛选 " + candidates.size() + " 个缺少二级归属的三级节点，本次扫描 " + nodes.size() + " 个。");
+    notes.add("已筛选 " + candidates.size() + " 个三级节点，本次扫描 " + nodes.size() + " 个。");
     notes.add("新增关系 " + createdCount + " 条。");
-    notes.add("编排边界：只处理二级栏目到三级内容的归属边，不处理一级到二级固定关系；每次最多 " + MAX_ORCHESTRATE_LLM_NODES + " 个节点，并发 " + MAX_ORCHESTRATE_PARALLELISM + " 路。");
-    notes.add("新增边默认隐藏；全局最多新增 " + MAX_ORCHESTRATE_CREATED_EDGES + " 条，每个三级节点最多新增 " + MAX_PARENT_EDGES_PER_NODE + " 条二级归属。");
+    notes.add("编排边界：处理二级栏目到三级内容的归属边，以及三级内容之间的证据边；不处理一级到二级固定关系。");
+    notes.add("新增边默认隐藏；全局最多新增 " + MAX_ORCHESTRATE_CREATED_EDGES + " 条；单节点本次可补多个二级归属，并最多补 " + MAX_ORCHESTRATE_EVIDENCE_EDGES_PER_NODE + " 条三级证据关系。");
     if (candidates.size() > nodes.size()) {
       notes.add("还有 " + (candidates.size() - nodes.size()) + " 个三级节点可继续点击全图编排。");
     }
     if (nodes.isEmpty()) {
-      notes.add("当前三级节点都已有二级归属，无需继续全图调用。");
+      notes.add("当前没有三级内容节点可编排。");
     }
     if (allowFallback) {
-      notes.add("用户已确认使用规则降级，本次未调用 Minimax。");
+      notes.add("已生成本地候选关系，请人工确认后使用。");
     }
-    return new KnowledgeGraphOrchestrateResponse(allowFallback ? "explicit-rule-fallback" : llmService.providerName(), nodes.size(), createdCount, results, notes);
+    return new KnowledgeGraphOrchestrateResponse(allowFallback ? "local-template" : llmService.providerName(), nodes.size(), createdCount, results, notes);
   }
 
   private List<RelationDraft> proposeRelationsInParallel(KnowledgeGraphView graph, List<KnowledgeGraphNode> nodes) {
@@ -123,7 +122,7 @@ public class KnowledgeGraphSmartService {
     try {
       List<CompletableFuture<RelationDraft>> futures = nodes.stream()
           .map(node -> CompletableFuture.supplyAsync(
-              () -> proposeRelations(node, graph, RelationScope.TERTIARY_PARENT_ONLY),
+              () -> proposeRelations(node, graph, RelationScope.TERTIARY_ORCHESTRATE),
               executor))
           .toList();
       try {
@@ -141,9 +140,11 @@ public class KnowledgeGraphSmartService {
   }
 
   private RelationDraft proposeRelations(KnowledgeGraphNode node, KnowledgeGraphView graph, RelationScope scope) {
-    KnowledgeRelationResult relationResult = scope == RelationScope.TERTIARY_PARENT_ONLY
-        ? llmService.suggestKnowledgeParentRelationsDetailed(node, graph)
-        : llmService.suggestKnowledgeRelationsDetailed(node, graph);
+    KnowledgeRelationResult relationResult = switch (scope) {
+      case TERTIARY_PARENT_ONLY -> llmService.suggestKnowledgeParentRelationsDetailed(node, graph);
+      case TERTIARY_ORCHESTRATE -> llmService.suggestKnowledgeOrchestrateRelationsDetailed(node, graph);
+      case FULL -> llmService.suggestKnowledgeRelationsDetailed(node, graph);
+    };
     List<KnowledgeRelationSuggestion> suggestions = boundedSuggestions(node, graph, relationResult.suggestions(), scope);
     return new RelationDraft(node, relationResult, suggestions, scope);
   }
@@ -153,12 +154,12 @@ public class KnowledgeGraphSmartService {
         ? fallbackParentSuggestions(node, graph)
         : fallbackSuggestions(node, graph);
     KnowledgeRelationResult result = new KnowledgeRelationResult(
-        "explicit-rule-fallback",
+        "local-template",
         false,
         false,
         false,
         suggestions,
-        List.of("用户已确认使用规则降级，未调用 Minimax。"));
+        List.of("已生成本地候选关系，请人工确认后使用。"));
     return new RelationDraft(node, result, boundedSuggestions(node, graph, suggestions, scope), scope);
   }
 
@@ -169,6 +170,8 @@ public class KnowledgeGraphSmartService {
     notes.addAll(draft.relationResult().notes());
     if (draft.scope() == RelationScope.TERTIARY_PARENT_ONLY) {
       notes.add("能力边界：全图编排只补二级栏目 -> 三级内容的归属边，不处理一级 -> 二级固定关系或三级之间证据边。");
+    } else if (draft.scope() == RelationScope.TERTIARY_ORCHESTRATE) {
+      notes.add("能力边界：全图编排可补二级栏目 -> 三级内容的归属边，也可补三级内容之间的证据边；不处理一级 -> 二级固定关系。");
     } else {
       notes.add("能力边界：每节点最多新增 " + MAX_EDGES_PER_NODE + " 条；只允许相邻层级或同级证据关系；新增边默认隐藏。");
     }
@@ -176,7 +179,7 @@ public class KnowledgeGraphSmartService {
       notes.add("部分候选关系已存在、无效或被跳过。");
     }
     if (createdEdges.isEmpty()) {
-      notes.add("未创建新关系，可在关系 CRUD 中手动补充。");
+      notes.add("未创建新关系，可在关系管理中手动补充。");
     }
     return new KnowledgeGraphAutoRelateResponse(draft.relationResult().provider(), draft.node(), draft.suggestions(), createdEdges, notes);
   }
@@ -249,6 +252,9 @@ public class KnowledgeGraphSmartService {
       if (scope == RelationScope.TERTIARY_PARENT_ONLY && !isTertiaryParentSuggestion(node, from, to, relation)) {
         continue;
       }
+      if (scope == RelationScope.TERTIARY_ORCHESTRATE && !isTertiaryOrchestrateSuggestion(node, from, to, relation)) {
+        continue;
+      }
       if (!relationAllowed(from, to, relation)) {
         continue;
       }
@@ -264,11 +270,24 @@ public class KnowledgeGraphSmartService {
           suggestion.toNodeKey(),
           relation,
           trimOrDefault(suggestion.reason(), "符合图谱能力边界的候选关系。")));
-      if (accepted.size() >= (scope == RelationScope.TERTIARY_PARENT_ONLY ? MAX_PARENT_EDGES_PER_NODE : MAX_EDGES_PER_NODE)) {
+      if (accepted.size() >= suggestionLimit(graph, scope)) {
         break;
       }
     }
     return accepted;
+  }
+
+  private int suggestionLimit(KnowledgeGraphView graph, RelationScope scope) {
+    return switch (scope) {
+      case TERTIARY_PARENT_ONLY -> parentSuggestionLimit(graph);
+      case TERTIARY_ORCHESTRATE -> parentSuggestionLimit(graph) + MAX_ORCHESTRATE_EVIDENCE_EDGES_PER_NODE;
+      case FULL -> MAX_EDGES_PER_NODE;
+    };
+  }
+
+  private int parentSuggestionLimit(KnowledgeGraphView graph) {
+    long sectionCount = graph.nodes().stream().filter(node -> node.level() == 1).count();
+    return Math.max(1, Math.toIntExact(Math.min(sectionCount, 8)));
   }
 
   private Map<String, Long> parentEdgeCountByTertiary(KnowledgeGraphView graph) {
@@ -300,7 +319,7 @@ public class KnowledgeGraphSmartService {
             node.nodeKey(),
             item.nodeKey(),
             relationFor(node.nodeType(), item.nodeType()),
-            "用户确认规则降级：基于标签或摘要关键词匹配。")));
+            "基于标签或摘要关键词匹配。")));
     return suggestions.stream().limit(MAX_EDGES_PER_NODE).toList();
   }
 
@@ -309,18 +328,18 @@ public class KnowledgeGraphSmartService {
     Set<String> keys = new LinkedHashSet<>(graph.nodes().stream().map(KnowledgeGraphNode::nodeKey).toList());
     List<KnowledgeRelationSuggestion> suggestions = new ArrayList<>();
     if ("SECTION".equals(type) && keys.contains("me")) {
-      suggestions.add(new KnowledgeRelationSuggestion("me", node.nodeKey(), "OWNS", "用户确认规则降级：二级栏目归属于个人核心。"));
+      suggestions.add(new KnowledgeRelationSuggestion("me", node.nodeKey(), "OWNS", "二级栏目归属于个人核心。"));
     } else if ("BLOG".equals(type) && keys.contains("section-blog")) {
-      suggestions.add(new KnowledgeRelationSuggestion("section-blog", node.nodeKey(), "CONTAINS", "用户确认规则降级：博客内容归入技术博客栏目。"));
+      suggestions.add(new KnowledgeRelationSuggestion("section-blog", node.nodeKey(), "CONTAINS", "博客内容归入技术博客栏目。"));
     } else if (("PROJECT".equals(type) || "MODULE".equals(type)) && keys.contains("section-evidence")) {
-      suggestions.add(new KnowledgeRelationSuggestion("section-evidence", node.nodeKey(), "INCLUDES", "用户确认规则降级：项目与模块归入项目证据栏目。"));
+      suggestions.add(new KnowledgeRelationSuggestion("section-evidence", node.nodeKey(), "INCLUDES", "项目与模块归入项目证据栏目。"));
       if (keys.contains("section-interview")) {
-        suggestions.add(new KnowledgeRelationSuggestion("section-interview", node.nodeKey(), "INCLUDES", "用户确认规则降级：项目证据可用于岗位适配与面试讲解。"));
+        suggestions.add(new KnowledgeRelationSuggestion("section-interview", node.nodeKey(), "INCLUDES", "项目证据可用于岗位适配与面试讲解。"));
       }
     } else if ("SKILL".equals(type) && keys.contains("section-resume")) {
-      suggestions.add(new KnowledgeRelationSuggestion("section-resume", node.nodeKey(), "INCLUDES", "用户确认规则降级：技能节点归入履历能力栏目。"));
+      suggestions.add(new KnowledgeRelationSuggestion("section-resume", node.nodeKey(), "INCLUDES", "技能节点归入履历能力栏目。"));
     }
-    return suggestions.stream().limit(MAX_PARENT_EDGES_PER_NODE).toList();
+    return suggestions.stream().limit(parentSuggestionLimit(graph)).toList();
   }
 
   private KnowledgeGraphNodeRequest toNodeRequest(KnowledgeGraphSmartNodeRequest request) {
@@ -412,6 +431,21 @@ public class KnowledgeGraphSmartService {
         && Set.of("INCLUDES", "CONTAINS").contains(relation);
   }
 
+  private boolean isTertiaryOrchestrateSuggestion(
+      KnowledgeGraphNode current,
+      KnowledgeGraphNode from,
+      KnowledgeGraphNode to,
+      String relation) {
+    if (isTertiaryParentSuggestion(current, from, to, relation)) {
+      return true;
+    }
+    return current.level() == 2
+        && from.level() == 2
+        && to.level() == 2
+        && touchesNode(new KnowledgeRelationSuggestion(from.nodeKey(), to.nodeKey(), relation, ""), current.nodeKey())
+        && Set.of("USES", "EXPLAINS", "RELATED").contains(relation);
+  }
+
   private boolean hasEvidenceOverlap(KnowledgeGraphNode from, KnowledgeGraphNode to) {
     Set<String> left = lowerSet(from.tags());
     Set<String> right = lowerSet(to.tags());
@@ -481,7 +515,8 @@ public class KnowledgeGraphSmartService {
 
   private enum RelationScope {
     FULL,
-    TERTIARY_PARENT_ONLY
+    TERTIARY_PARENT_ONLY,
+    TERTIARY_ORCHESTRATE
   }
 
   private record RelationDraft(

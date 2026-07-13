@@ -28,6 +28,10 @@ public class ApiException extends RuntimeException {
     return new ApiException(HttpStatus.BAD_REQUEST, 40000, message);
   }
 
+  public static ApiException tooManyRequests(String message) {
+    return new ApiException(HttpStatus.TOO_MANY_REQUESTS, 42900, message);
+  }
+
   public static ApiException serviceUnavailable(String message) {
     return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, 50310, message);
   }

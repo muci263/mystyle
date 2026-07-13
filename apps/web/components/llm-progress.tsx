@@ -23,7 +23,7 @@ export function useLlmProgress() {
   const start = useCallback((title: string, steps: Array<Omit<LlmProgressStep, "status">>) => {
     setProgress({
       title,
-      summary: "准备 LLM 输入契约",
+      summary: "AI 任务已启动",
       active: true,
       steps: steps.map((step, index) => ({ ...step, status: index === 0 ? "active" : "pending" })),
     });
@@ -79,7 +79,7 @@ export function LlmProgressPanel({ state, onDismiss }: { state: LlmProgressState
     <section className="llm-progress-panel" aria-live="polite" aria-label="LLM 任务进度">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">LLM Runbook</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">AI Status</p>
           <h3 className="mt-2 text-lg font-semibold text-ink">{state.title}</h3>
           <p className="mt-1 text-sm leading-6 text-graphite">{state.summary}</p>
         </div>

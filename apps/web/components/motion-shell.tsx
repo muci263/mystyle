@@ -2,6 +2,12 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 
+const moduleEase = [0.22, 1, 0.36, 1] as const;
+
+export function PageTransition({ children }: { children: React.ReactNode }) {
+  return <div className="page-transition-shell">{children}</div>;
+}
+
 export function FadeIn({
   children,
   delay = 0,
@@ -15,10 +21,11 @@ export function FadeIn({
 
   return (
     <motion.div
-      initial={reduceMotion ? false : { opacity: 0, y: 34 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: reduceMotion ? 0 : 0.68, delay: reduceMotion ? 0 : delay, ease: [0.22, 1, 0.36, 1] }}
+      initial={reduceMotion ? false : { opacity: 0, y: 28 }}
+      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -16 }}
+      viewport={{ once: true, amount: 0.12, margin: "-80px" }}
+      transition={{ duration: reduceMotion ? 0 : 0.64, delay: reduceMotion ? 0 : delay, ease: moduleEase }}
       className={className}
     >
       {children}
@@ -40,11 +47,12 @@ export function MotionSurface({
   return (
     <motion.article
       id={id}
-      initial={reduceMotion ? false : { opacity: 0, y: 36 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 30, scale: 0.99 }}
+      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -14, scale: 0.995 }}
       whileHover={reduceMotion ? undefined : { y: -3 }}
-      viewport={{ once: true, amount: 0.14 }}
-      transition={{ duration: reduceMotion ? 0 : 0.6, ease: [0.22, 1, 0.36, 1] }}
+      viewport={{ once: true, amount: 0.12 }}
+      transition={{ duration: reduceMotion ? 0 : 0.58, ease: moduleEase }}
       className={`surface enhanced-surface p-6 md:p-7 ${className}`}
     >
       {children}

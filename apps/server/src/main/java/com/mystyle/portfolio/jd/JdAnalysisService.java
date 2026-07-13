@@ -136,11 +136,11 @@ public class JdAnalysisService {
       List<ModuleDemo> orderedModules) {
     return new JdAnalysisResponse(
         analysisId,
-        "explicit-rule-fallback",
+        "local-template",
         role,
         List.copyOf(keywords),
         matchScore,
-        "用户已确认使用规则降级，基于当前经历资产生成岗位适配结果，未调用 Minimax。",
+        "基于当前经历资产生成岗位适配结果，请结合真实经历人工确认后使用。",
         orderedProjects.stream()
             .map(project -> new ProjectRecommendation(
                 project.slug(),
@@ -162,7 +162,7 @@ public class JdAnalysisService {
             "先用 30 秒说明岗位匹配定位，再展开最匹配项目。",
             "每个推荐 Demo 准备一个故障、优化或取舍点。",
             "避免空泛说 AI，重点讲清模型接入和工程约束。"),
-        List.of("这是用户显式触发的规则降级结果，不是模型输出。"));
+        List.of("这是本地模板生成的辅助结果，请人工确认后使用。"));
   }
 
   private String buildProjectEmphasis(Project project, Set<String> keywords) {

@@ -34,7 +34,18 @@ public class AgentWorkflowService {
         ? "rag-question"
         : request.templateId();
     List<AgentWorkflowStep> steps = buildSteps(templateId);
-    String answer = llmService.runAgentWorkflow(request.question(), templateId);
+    String answer = llmService.runAgentWorkflow(request.question(), templateId, request.memory());
+    AgentWorkflowRun run = new AgentWorkflowRun(UUID.randomUUID().toString(), "COMPLETED", request.question(), answer, steps);
+    runs.put(run.runId(), run);
+    return run;
+  }
+
+  public AgentWorkflowRun stream(AgentWorkflowRequest request, java.util.function.Consumer<String> onDelta) {
+    String templateId = request.templateId() == null || request.templateId().isBlank()
+        ? "rag-question"
+        : request.templateId();
+    List<AgentWorkflowStep> steps = buildSteps(templateId);
+    String answer = llmService.streamAgentWorkflow(request.question(), templateId, request.memory(), onDelta);
     AgentWorkflowRun run = new AgentWorkflowRun(UUID.randomUUID().toString(), "COMPLETED", request.question(), answer, steps);
     runs.put(run.runId(), run);
     return run;

@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, Plus, RefreshCw, Rocket, Save, Trash2, UploadCloud } from "lucide-react";
 import { LlmProgressPanel, useLlmProgress } from "@/components/llm-progress";
+import { AdminWorktop } from "@/components/site-shell";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import type {
   ResumeBasicInfo,
@@ -118,24 +119,23 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
 
   async function parseUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await runParseUpload(false);
+    await runParseUpload();
   }
 
-  async function runParseUpload(allowFallback: boolean) {
+  async function runParseUpload() {
     await run("parse", async () => {
-      llmProgress.start(allowFallback ? "规则兜底简历解析" : "AI 简历扫描", [
+      llmProgress.start("AI 简历扫描", [
         { id: "contract", label: "解析契约", detail: "约定 basicInfo 与 SKILL/AWARD/INTERNSHIP/PROJECT/ADVANTAGE 输出结构。" },
         { id: "request", label: "模型扫描", detail: "Minimax 正在抽取真实简历信息，不补造经历。" },
         { id: "guard", label: "结构校验", detail: "后端校验字段、分组、可见性和排序。" },
         { id: "preview", label: "生成预览", detail: "创建解析任务，等待人工确认写入草稿。" },
       ]);
       llmProgress.setStep("contract", "done", "输入为原始简历文本，输出为受控 JSON 草稿。");
-      llmProgress.activate("request", allowFallback ? "用户已确认使用规则降级，本次不调用 Minimax。" : "正在调用简历结构化解析。");
+      llmProgress.activate("request", "正在调用简历结构化解析。");
       const task = await apiPost<ResumeUploadTask>("/admin/resume/uploads/parse", {
         filename: "resume-text.txt",
         contentType: "text/plain",
         content: uploadText,
-        allowFallback,
       });
       llmProgress.activate("guard", "正在检查解析结果是否可写入草稿。");
       llmProgress.setStep("guard", "done", task.errorMessage ?? "解析结果已通过结构化校验。");
@@ -195,17 +195,13 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
   return (
     <section className="admin-resume-page">
       <div className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
-        <div className="admin-resume-hero">
-          <div>
-            <p className="eyebrow">Resume CMS</p>
-            <h1 className="display mt-6 text-5xl leading-[1.02] md:text-7xl">履历内容管理</h1>
-          </div>
+        <AdminWorktop eyebrow="Resume CMS" title="履历内容管理">
           <div className="admin-status-grid">
             <StatusTile label="草稿版本" value={draft.version.versionName} />
             <StatusTile label="可见条目" value={`${visibleCount}`} />
             <StatusTile label="版本状态" value={draft.version.status} />
           </div>
-        </div>
+        </AdminWorktop>
 
         {(notice || error) ? (
           <div className={`admin-message ${error ? "is-error" : ""}`}>
@@ -340,17 +336,9 @@ export function ResumeAdminClient({ initialDraft, initialVersions }: ResumeAdmin
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">Resume Upload</p>
                 <h2 className="mt-3 text-2xl font-semibold">简历上传解析</h2>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-graphite">支持粘贴文本扫描。默认必须真实调用 Minimax；未配置、调用失败或模型返回不合格时会直接报错。只有点击规则兜底解析时，才使用本地规则生成可确认任务。</p>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-graphite">支持粘贴文本扫描。系统会调用 Minimax 提取结构化草稿，未配置、调用失败或模型返回不合格时会提示错误，避免写入不可靠内容。</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => runParseUpload(true)}
-                  disabled={busy === "parse" || !uploadText.trim()}
-                  className="secondary-action px-5 py-3 text-sm font-medium disabled:opacity-55"
-                >
-                  规则兜底解析
-                </button>
                 <button disabled={busy === "parse" || !uploadText.trim()} className="primary-action px-5 py-3 text-sm font-medium disabled:opacity-55">
                   {busy === "parse" ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}
                   AI 扫描简历

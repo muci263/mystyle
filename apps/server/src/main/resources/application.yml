@@ -35,3 +35,9 @@ app:
       base-url: ${MINIMAX_BASE_URL:https://api.minimaxi.com/v1}
       text-model: ${MINIMAX_TEXT_MODEL:MiniMax-M2.7}
       vision-model: ${MINIMAX_VISION_MODEL:MiniMax-Text-01}
+    budget:
+      zone-id: ${LLM_BUDGET_ZONE_ID:Asia/Shanghai}
+      enabled: ${LLM_BUDGET_ENABLED:true}
+      daily-limit-rmb: ${LLM_DAILY_BUDGET_RMB:5.0}
+      input-price-rmb-per-million-tokens: ${LLM_INPUT_PRICE_RMB_PER_MILLION_TOKENS:2.1}
+      output-price-rmb-per-million-tokens: ${LLM_OUTPUT_PRICE_RMB_PER_MILLION_TOKENS:8.4}

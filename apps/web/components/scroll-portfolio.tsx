@@ -68,6 +68,12 @@ export function ScrollPortfolio({ home }: { home: HomeView }) {
         onPointerMove={moveHeroSpotlight}
         onPointerLeave={resetHeroSpotlight}
       >
+        <div aria-hidden="true" className="knowledge-hero-wordmark">
+          <span>Port</span>
+          <span>folio</span>
+        </div>
+        <p className="knowledge-hero-note">Backend evidence that moves with the interview.</p>
+        <p className="knowledge-hero-season">New graph system / 2026</p>
         <div className="knowledge-graph-backdrop">
           <KnowledgeGraphScene graph={home.knowledgeGraph} onNodeFocus={handleNodeFocus} onNodeBlur={handleNodeBlur} />
         </div>

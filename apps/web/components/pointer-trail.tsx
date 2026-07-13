@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const trailCount = 7;
 
@@ -8,8 +9,15 @@ export function PointerTrail() {
   const rootRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLSpanElement>(null);
   const segmentRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     const root = rootRef.current;
     const head = headRef.current;
     const segments = segmentRefs.current.filter((segment): segment is HTMLSpanElement => segment !== null);
@@ -76,9 +84,13 @@ export function PointerTrail() {
       window.removeEventListener("blur", hideTrail);
       window.cancelAnimationFrame(frameId);
     };
-  }, []);
+  }, [mounted]);
 
-  return (
+  if (!mounted) {
+    return null;
+  }
+
+  return createPortal(
     <div ref={rootRef} className="pointer-trail" data-visible="false" aria-hidden="true">
       <span ref={headRef} className="pointer-trail-head" />
       {Array.from({ length: trailCount }, (_, index) => (
@@ -90,6 +102,7 @@ export function PointerTrail() {
           className={`pointer-trail-streak pointer-trail-streak-${index + 1}`}
         />
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }

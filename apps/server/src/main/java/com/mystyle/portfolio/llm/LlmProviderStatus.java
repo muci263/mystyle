@@ -5,5 +5,6 @@ public record LlmProviderStatus(
     boolean configured,
     String textModel,
     String visionModel,
-    String mode) {
+    String mode,
+    LlmBudgetStatus budget) {
 }

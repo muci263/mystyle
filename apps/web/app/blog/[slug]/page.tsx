@@ -20,12 +20,11 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
     apiGet<BlogAnnotation[]>(`/public/blog-posts/${slug}/annotations`),
     apiGet<BlogInteractionSummary>(`/public/blog-posts/${slug}/interactions`),
   ]);
-  const paragraphs = toParagraphs(post.content);
 
   return (
     <SiteShell>
       <article className="journal-article-shell">
-        <div className="mx-auto max-w-7xl px-5 py-14 md:px-8 md:py-20">
+        <div className="mx-auto max-w-[96rem] px-5 py-14 md:px-8 md:py-20">
           <FadeIn>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <Link href="/blog" className="text-link inline-flex items-center gap-2 text-sm font-medium">
@@ -38,7 +37,7 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
               </Link>
             </div>
 
-            <header className="mt-12 grid gap-10 border-b border-line pb-12 lg:grid-cols-[minmax(0,0.9fr)_280px] lg:items-end">
+            <header className="mt-12 grid gap-10 border-b border-line pb-12 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end xl:grid-cols-[minmax(0,1fr)_300px]">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
                   <Link
@@ -89,9 +88,9 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
             </header>
           </FadeIn>
 
-          <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="mt-10 grid gap-8 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <FadeIn>
-              <BlogArticleBodyClient slug={slug} paragraphs={paragraphs} initialAnnotations={annotations} />
+              <BlogArticleBodyClient slug={slug} content={post.content} initialAnnotations={annotations} />
             </FadeIn>
             <div className="lg:sticky lg:top-28 lg:self-start">
               <BlogEngagementClient
@@ -113,12 +112,4 @@ async function getPost(slug: string) {
   } catch {
     notFound();
   }
-}
-
-function toParagraphs(content: string) {
-  return content
-    .replaceAll("\\n", "\n")
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
 }
